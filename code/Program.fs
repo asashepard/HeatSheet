@@ -1,31 +1,19 @@
-namespace HeatSheetMinimal
-
 open System
-open Parser.Parser  // No longer need AST or Evaluator
+open Combinator
+open Evaluator
+open Parser
 
-module Program =
-    [<EntryPoint>]
-    let main argv =
-        let usage = "Usage: dotnet run <file.hs> or dotnet run \"<heatsheet program inline>\""
-        match argv with
-        | [| |] ->
-            printfn "%s" usage
-            0
-        | [| single |] when single.EndsWith(".hs") || single.EndsWith(".txt") ->
-            let text = System.IO.File.ReadAllText(single)
-            try
-                let declarations = parse text
-                declarations |> List.iter (printfn "%A")
-                0
-            with ex ->
-                printfn "Error: %s" ex.Message
-                1
-        | _ ->
-            let inlineProg = String.Join(" ", argv)
-            try
-                let declarations = parse inlineProg
-                declarations |> List.iter (printfn "%A")
-                0
-            with ex ->
-                printfn "Error: %s" ex.Message
-                1
+let usage() =
+    printfn "Usage: dotnet run <file_name.hs>"
+    exit 1  
+
+[<EntryPoint>]
+let main args =
+    if args.Length <> 1 then usage()
+    let fileContents = System.IO.File.ReadAllText(args[0])
+    let result = parse fileContents
+    match result with
+    | Some p -> 
+        printfn "%A" (eval p)
+    | None -> usage()
+    0

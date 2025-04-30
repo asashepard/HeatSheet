@@ -1,10 +1,26 @@
-namespace AST
+module AST
 
-type Expr =
-    | Number of float
-    | Seq of Expr list
+open System
 
-// A program is a sequence of expressions
+type Identifier = string
 
-type Program =
-    Expr list
+type AthleteDeclaration = {
+    Name: Identifier
+    Events: Identifier list
+}
+
+type RosterDeclaration = {
+    Name: Identifier
+}
+
+type RosterAdd = {
+    Name: Identifier
+    Roster: Identifier
+}
+
+type Statement =
+    | Athlete of AthleteDeclaration
+    | Roster of RosterDeclaration
+    | RosterAdd of RosterAdd
+
+type Program = Statement list

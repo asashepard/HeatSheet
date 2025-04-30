@@ -1,23 +1,28 @@
-namespace Evaluator
+module Evaluator
 
 open AST
 
-type Value =
-    | NumVal of float
-    | UnitVal
+type EvalState = {
+    Athletes: Map<Identifier, AthleteDeclaration>
+    Rosters: Map<Identifier, Set<Identifier>>
+}
 
-module Evaluator =
-    let rec evalExpr expr : Value =
-        match expr with
-        | Number v -> NumVal v
-        | Seq exprs ->
-            exprs
-            |> List.map evalExpr
-            |> ignore
-            UnitVal
+let emptyState = {
+    Athletes = Map.empty
+    Rosters = Map.empty
+}
 
-    let evalProgram (prog: Program) : Value =
-        // Evaluate each expression in sequence
-        prog
-        |> List.map evalExpr
-        |> List.last
+let evalStatement (stmt: Statement) : string =
+    match stmt with
+    | Athlete athlete ->
+        sprintf "Created athlete %s with events: %s"
+            athlete.Name (String.concat ", " athlete.Events)
+
+    | Roster roster ->
+        sprintf "Created roster %s" roster.Name
+
+    | RosterAdd ra ->
+        sprintf "Successfully added %s to roster %s" ra.Name ra.Roster
+
+let eval (prog: Program) : string list = List.map evalStatement prog
+
