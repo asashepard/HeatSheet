@@ -176,12 +176,15 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
         <roster-add>            ::= add <athlete> to <roster>
 
         <output>                ::= output <roster>
-        
+
         <event-list>            ::= <event> , <event>*
         
         <event>                 ::= <Identifier>
 
-        <PR>                    ::= <Identifier> : <float>
+        <PR>                    ::= <event> : <time>
+
+        <time>                  ::= <float>
+                                | <int> : <float>
 
         <float>                 ::= <int> . <int>
 

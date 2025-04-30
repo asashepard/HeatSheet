@@ -4,8 +4,11 @@ open System
 
 type Identifier = string
 
-type PR = { Event: Identifier; Time: float }
+type Time = 
+| Float of float
+| MinuteTime of float * float
 
+type PR = { Event: Identifier; Time: Time }
 
 type AthleteDeclaration = {
     Name: Identifier

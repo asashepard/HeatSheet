@@ -27,45 +27,39 @@ let addToRoster (state: EvalState) (ra: RosterAdd) =
         { state with Rosters = state.Rosters.Add(ra.Roster, updated) }
     | _ -> state
 
-let buildRosterTable (rows: string list) : string =
-    let header = "Name & Events & PRs \\\\ \\midrule"
-    let body = String.concat "\n" rows
+// ---------------------- LaTeX Formatting ----------------------
 
-    String.concat "\n" [
-        "\\begin{longtable}{lll}"
-        header
-        body
-        "\\end{longtable}"
-    ]
+let formatTime = function
+    | Float f -> sprintf "%.2f" f
+    | MinuteTime (m, s) -> sprintf "%.0f:%.2f" m s
 
+let formatAthleteCells (a: AthleteDeclaration) : string * string * string =
+    let events = String.concat ", " a.Events
+    let prs =
+        a.PRs
+        |> List.map (fun pr -> sprintf "%s: %s" pr.Event (formatTime pr.Time))
+        |> String.concat ", "
+    a.Name, events, prs
 
-let formatAthleteRow (state: EvalState) (name: Identifier) : string =
+let renderAthleteRow (state: EvalState) (name: Identifier) : string =
     match Map.tryFind name state.Athletes with
     | Some a ->
-        let events = String.concat ", " a.Events
-        let prs =
-            a.PRs
-            |> List.map (fun pr -> sprintf "%s: %.2f" pr.Event pr.Time)
-            |> String.concat ", "
-        sprintf "%s & %s & %s \\\\" a.Name events prs
+        let n, e, p = formatAthleteCells a
+        sprintf "%s & %s & %s \\\\" n e p
     | None ->
         sprintf "%s & UNKNOWN & UNKNOWN \\\\" name
 
-let buildLatexTable (rows: string list) : string =
-    let header = 
-        "Name & Events \\\\\n\\hline"
-    
+let buildRosterTable (rows: string list) : string =
+    let header = "\\toprule\n\\textbf{Name} & \\textbf{Events} & \\textbf{PRs} \\\\\n\\midrule"
     let body = String.concat "\n" rows
-
     String.concat "\n" [
-        "\\documentclass{article}"
-        "\\begin{document}"
-        "\\begin{tabular}{ll}"
+        "\\begin{tabularx}{\\textwidth}{lXl}"
         header
         body
-        "\\end{tabular}"
-        "\\end{document}"
+        "\\bottomrule"
+        "\\end{tabularx}"
     ]
+
 
 let buildLatexDocument (table: string) (roster: string) : string =
     String.concat "\n" [
@@ -73,23 +67,26 @@ let buildLatexDocument (table: string) (roster: string) : string =
         "\\usepackage[margin=1in]{geometry}"
         "\\usepackage{booktabs}"
         "\\usepackage{longtable}"
+        "\\usepackage{tabularx}"
+        "\\usepackage{booktabs}"
+        "\\usepackage{siunitx}"
+        "\\newcolumntype{L}{>{\\raggedright\\arraybackslash}X}"
         "\\begin{document}"
         $"\\section*{{Roster: {roster}}}"
         table
         "\\end{document}"
     ]
 
-
+// ---------------------- Generation + Evaluation ----------------------
 
 let generateLatex (state: EvalState) (roster: Identifier) : string option =
     match Map.tryFind roster state.Rosters with
     | None -> None
     | Some members ->
-        let rows = members |> Set.toList |> List.map (formatAthleteRow state)
+        let rows = members |> Set.toList |> List.map (renderAthleteRow state)
         let table = buildRosterTable rows
         let tex = buildLatexDocument table roster
         Some (runPdfLatex tex "." (roster + "_roster"))
-
 
 let eval (prog: Program) : unit =
     let finalState, _ =

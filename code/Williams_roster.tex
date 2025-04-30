@@ -2,12 +2,19 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{booktabs}
 \usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \begin{document}
 \section*{Roster: Williams}
-\begin{longtable}{lll}
-Name & Events & PRs \\ \midrule
-AsaShepard & 400m, 800m, 4x400m & 800m: 50.00, 400m: 48.00 \\
-ColinStone & 200m, 400m, 4x400m & 400m: 56.00, 200m: 25.00 \\
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Name} & \textbf{Events} & \textbf{PRs} \\
+\midrule
+AsaShepard & 400m, 800m, 4x400m & 800m: 1:50.00, 400m: 48.00 \\
+ColinStone & 200m, 400m, 4x400m & 400m: 49.15, 200m: 22.97 \\
 YanniKakouris & 100m, 200m, 4x100m & 100m: 11.01, 200m: 22.42 \\
-\end{longtable}
+\bottomrule
+\end{tabularx}
 \end{document}

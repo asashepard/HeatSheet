@@ -5,7 +5,7 @@ open AST
 
 
 /// Identifer Parser
-let reserved = Set.ofList [ "prs" ]
+let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster" ]
 
 let pidentifier =
     let baseId =
@@ -18,40 +18,51 @@ let pidentifier =
         )
     ) <!> "identifier"
 
-
-
 /// Commas for lists
-let pcomma = pright pws0 (pleft (pchar ',') pws0)
+let pcomma = pbetween pws0 (pchar ',') pws0
+
+let pidentifierlist = 
+    pseq pidentifier (pmany0 (pright pcomma pidentifier)) (fun (first, rest) -> first :: rest)
+
 
 /// List of events
 let peventList =
     pseq pidentifier (pmany0 (pright pcomma pidentifier))
         (fun (h, t) -> h :: t) <!> "event-list"
 
-/// PR stuff
 let pcolon = pbetween pws0 (pchar ':') pws0
 
-let pint = pmany1 (psat is_digit) |>> (stringify >> float)
+let pint: Parser<float> =
+    pmany1 (psat is_digit) |>> (stringify >> float)
 
-let pfloat =
+let pfloat: Parser<float> =
     pseq
-        (pmany1 (psat is_digit) |>> stringify)  // integer part
-        (pright (pchar '.') (pmany1 (psat is_digit) |>> stringify))  // fractional part
+        (pmany1 (psat is_digit) |>> stringify)
+        (pright (pchar '.') (pmany1 (psat is_digit) |>> stringify))
         (fun (i, d) -> float (i + "." + d))
 
-let ptime = pfloat <|> pint <!> "ptime"
+let pseconds: Parser<Time> =
+    (pfloat |>> Float) <|> (pint |>> Float)
 
-let prentry =
+let pminutetime: Parser<Time> =
+    pseq pint (pright (pchar ':') (pfloat <|> pint))
+        (fun (min, sec) -> MinuteTime(min, sec))
+
+let ptime: Parser<Time> =
+    pminutetime <|> pseconds <!> "ptime"
+
+let prentry: Parser<PR> =
     pseq pidentifier (pright pcolon ptime)
         (fun (event, time) -> { Event = event; Time = time }) <!> "prentry"
-        
-let prList =
+
+let prList: Parser<PR list> =
     pseq prentry (pmany0 (pright pcomma prentry))
         (fun (h, t) -> h :: t) <!> "prList"
 
 
+
 /// Athlete Declaration
-let athleteHeader = pright (pright (pstr "let athlete") pws0) pidentifier
+let athleteHeader = pright (pright (pseq (pstr "let") (pright pws0 (pstr "athlete")) (fun (_, r) -> r)) pws0) pidentifier
 
 let athleteEvents =
     pright (pright pcomma (pstr "events:")) (pright pws0 peventList)
@@ -70,7 +81,7 @@ let athleteDecl =
 
 
 /// Roster Declaration
-let rosterDecl = pseq (pright (pstr "let roster") pws0) pidentifier (fun (_, name)-> {Name = name}) <!> "rosterDecl"
+let rosterDecl = pseq (pright (pseq (pstr "let") (pright pws0 (pstr "roster")) (fun (_, r) -> r)) pws0) pidentifier (fun (_, name)-> {Name = name}) <!> "rosterDecl"
 
 /// Add to Roster
 
