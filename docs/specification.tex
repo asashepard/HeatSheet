@@ -159,26 +159,41 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
         program             ::= <statement>;+
         
-        statement           ::= <roster-declaration>
-                              | <athlete-declaration>
-                              | <roster-add>
+        statement               ::= <roster-declaration>
+                                | <athlete-declaration>
+                                | <roster-add>
+                                | <output>
         
-        roster-declaration  ::= let roster <Identifier>
+        <roster-declaration>    ::= let roster <Identifier>
         
-        athlete-declaration ::= let athlete: <Identifier>,
-                                events: <event-list>
+        <athlete-declaration>   ::= let athlete: <Identifier>,
+                                    events: <event-list>
         
-        roster-add          ::= add <Identifier> to <Identifier>
+        <athelte>               ::= <Identifier>    
+
+        <roster>                ::= <Identifier>                    
         
-        event-list          ::= <event> , <event>*
+        <roster-add>            ::= add <athlete> to <roster>
+
+        <output>                ::= output <roster>
         
-        event               ::= <Identifier>
+        <event-list>            ::= <event> , <event>*
         
-        score-entry         ::= <place> : <Int>
+        <event>                 ::= <Identifier>
+
+        <PR>                    ::= <Identifier> : <float>
+
+        <float>                 ::= <int> . <int>
+
+        <int>                   ::= <digit>+
+
+        <digit>                 ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
         
-        Identifier          ::= (<Letter> | <Digit>)*
+        <score-entry>           ::= <place> : <Int>
         
-        Letter              ::= a-z | A-Z
+        <Identifier>            ::= (<Letter> | <Digit>)*
+        
+        <Letter>                ::= a-z | A-Z
 
     \end{lstlisting}
     
