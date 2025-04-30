@@ -1,12 +1,12 @@
 let roster Williams
 
-let athlete: YanniKakouris,
+let athlete YanniKakouris,
   events: 100m, 200m, 4x100m,
   prs:
     100m: 11.01,
-    200m: 22.42
+    200m: 22.42;
 
-add YanniKakouris to Williams
+add YanniKakouris to Williams;
 
 let meet: NESCACChampionships,
   events: 100m, 200m, 400m, 4x100m, 4x400m,

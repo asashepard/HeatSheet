@@ -1,7 +1,8 @@
+open Parser
 open System
 open Combinator
 open Evaluator
-open Parser
+
 
 let usage() =
     printfn "Usage: dotnet run <file_name.hs>"
@@ -12,6 +13,7 @@ let main args =
     if args.Length <> 1 then usage()
     let fileContents = System.IO.File.ReadAllText(args[0])
     let result = parse fileContents
+    printfn "%A" result
     match result with
     | Some p -> 
         printfn "%A" (eval p)
