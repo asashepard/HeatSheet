@@ -8,9 +8,7 @@ type Time =
 | Float of float
 | MinuteTime of float * float
 
-type Place = { Position: int; Suffix: string}
-
-type ScoreEntry = { Place: Place; Score: int }
+type ScoreEntry = { Place: int; Score: int }
 
 type PR = { Event: Identifier; Time: Time }
 
@@ -43,7 +41,7 @@ type MeetAdd = {
 type MeetDeclaration = {
     Name: Identifier
     Events: Identifier list
-    Scoring: Place list
+    Scoring: ScoreEntry list
     Teams: Identifier list
 }
 

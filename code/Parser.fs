@@ -5,7 +5,7 @@ open AST
 
 
 /// Identifer Parser
-let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster"; "scoring" ]
+let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster"; "scoring"; "include"; "in" ]
 let suffix = Set.ofList [ "st"; "nd"; "rd"; "th" ]
 
 let pidentifier =
@@ -126,7 +126,7 @@ let psuffix =
         if Set.contains s suffix then presult s else pzero
     ) <!> "suffix"
 
-let pplace = pseq (pleft (pseq pnumber psuffix (fun(x, y) -> int x)) pcolon) (pleft pnumber pws0) (fun (x, y) -> {Position = int x; Suffix = y})
+let pplace = pseq (pleft (pseq pnumber psuffix (fun(x, y) -> int x)) pcolon) (pleft pnumber pws0) (fun (x, y) -> {Place = int x; Score = int y})
 
 let pscoringList = 
     pseq pplace (pmany0 (pright pcomma pplace))
@@ -155,9 +155,9 @@ let meetDecl =
 
 /// Add to Meet
 
-let meetAddTeam = pseq (pright (pstr "add") pws0) (pleft pidentifier pws0) snd
-let meetAddMeet = pseq (pright (pstr "to") pws0) pidentifier snd
-let meetAdd = pseq rosterAddAthlete rosterAddRoster (fun (team, meet)-> {TeamToAdd = team; Meet = meet}) <!> "rosterAdd"
+let meetAddTeam = pseq (pright (pstr "include") pws0) (pleft pidentifier pws0) snd
+let meetAddMeet = pseq (pright (pstr "in") pws0) pidentifier snd
+let meetAdd = pseq meetAddTeam meetAddMeet (fun (team, meet)-> {TeamToAdd = team; Meet = meet}) <!> "meetAdd"
 
 
 /// Optimize Parser

@@ -31,7 +31,7 @@
 \rhead{\today}
 \lfoot{CSCI 334: Principles of Programming Languages}
 \cfoot{\thepage}
-\rfoot{Spring 2024}
+\rfoot{Spring 2025}
 
 % Some commands for changing header and footer format
 \renewcommand{\headrulewidth}{0.4pt}
@@ -157,51 +157,82 @@ Coaches can impose constraints to model the realities of competition, such as li
 HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets.
 
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
-        program             ::= <statement>;+
-        
-        statement               ::= <roster-declaration>
-                                | <athlete-declaration>
-                                | <roster-add>
-                                | <output>
-        
-        <roster-declaration>    ::= let roster <Identifier>
-        
-        <athlete-declaration>   ::= let athlete: <Identifier>,
-                                    events: <event-list>
-        
-        <athelte>               ::= <Identifier>    
+  program             ::= <statement> ;+
 
-        <roster>                ::= <Identifier>                    
-        
-        <roster-add>            ::= add <athlete> to <roster>
+  statement           ::= <roster-declaration>
+                       | <athlete-declaration>
+                       | <meet-declaration>
+                       | <meet-add>
+                       | <roster-add>
+                       | <output>
+                       | <optimize>
 
-        <output>                ::= output <roster>
+  <roster-declaration>    ::= let roster <Identifier>
+                           | let roster <Identifier>, 
+                             athletes: <athlete-list>
 
-        <event-list>            ::= <event> , <event>*
-        
-        <event>                 ::= <Identifier>
+  <athlete-declaration>   ::= let athlete <Identifier>,
+                              events: <event-list>
+                           | let athlete <Identifier>,
+                             events: <event-list>,
+                             PRs: <pr-list>
 
-        <PR>                    ::= <event> : <time>
+  <meet-declaration>      ::= let meet <Identifier>,
+                              events: <event-list>,
+                              scoring: <scoring-list>
+                           | let meet <Identifier>,
+                             events: <event-list>,
+                             scoring: <scoring-list>,
+                             teams: <roster-list>
 
-        <time>                  ::= <float>
-                                | <int> : <float>
+  <meet-add>              ::= include <roster-list> in <meet>
 
-        <float>                 ::= <int> . <int>
+  <roster-add>            ::= add <athlete> to <roster>
 
-        <int>                   ::= <digit>+
+  <output>                ::= output <roster>
 
-        <digit>                 ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-        
-        <score-entry>           ::= <place> : <Int>
-        
-        <Identifier>            ::= (<Letter> | <Digit>)*
-        
-        <Letter>                ::= a-z | A-Z
+  <optimize>              ::= optimize <roster> for <meet>
 
-    \end{lstlisting}
+  <athlete>               ::= <Identifier>
+
+  <roster>                ::= <Identifier>
+
+  <meet>                  ::= <Identifier>
+
+  <athlete-list>          ::= <athlete> , <athlete>*
+
+  <roster-list>           ::= <roster> , <roster>*
+
+  <event-list>            ::= <event> , <event>*
+
+  <event>                 ::= <Identifier>
+
+  <pr-list>               ::= <pr> , <pr>*
+
+  <pr>                    ::= <event> : <time>
+
+  <scoring-list>          ::= <score-entry> , <score-entry>*
+
+  <score-entry>           ::= <place> : <int>
+
+  <place>                 ::= <int> <suffix>
+
+  <suffix>                ::= st | nd | rd | th
+
+  <time>                  ::= <float>
+                           | <int> : <float>
+
+  <float>                 ::= <int> . <int>
+
+  <int>                   ::= <digit>+
+
+  <digit>                 ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+
+  <Identifier>            ::= (<Letter> | <Digit>)*
+
+  <Letter>                ::= a-z | A-Z
     
-    
-    
+\end{lstlisting}
 
 \subsection*{Semantics}
 
