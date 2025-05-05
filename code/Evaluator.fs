@@ -7,11 +7,13 @@ open System
 type EvalState = {
     Athletes: Map<Identifier, AthleteDeclaration>
     Rosters: Map<Identifier, Set<Identifier>>
+    Meets: Map<Identifier, MeetDeclaration>
 }
 
 let emptyState = {
     Athletes = Map.empty
     Rosters = Map.empty
+    Meets = Map.empty
 }
 
 let addAthlete (state: EvalState) (a: AthleteDeclaration) =
@@ -26,6 +28,9 @@ let addToRoster (state: EvalState) (ra: RosterAdd) =
         let updated = members.Add ra.Name
         { state with Rosters = state.Rosters.Add(ra.Roster, updated) }
     | _ -> state
+
+let addMeet (state: EvalState)(m: MeetDeclaration) =
+    {state with Meets = state.Meets.Add(m.Name, m)}
 
 // ---------------------- LaTeX Formatting ----------------------
 
@@ -103,5 +108,6 @@ let eval (prog: Program) : unit =
                 | None ->
                     printfn "Roster %s not found" rs.RosterToShowName
                     state, lastPdf
+            | Meet m -> addMeet state m, lastPdf
         ) (emptyState, None) prog
     ()

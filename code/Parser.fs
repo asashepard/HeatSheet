@@ -5,7 +5,8 @@ open AST
 
 
 /// Identifer Parser
-let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster" ]
+let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster"; "scoring" ]
+let suffix = Set.ofList [ "st"; "nd"; "rd"; "th" ]
 
 let pidentifier =
     let baseId =
@@ -98,6 +99,40 @@ let rosterShow =
     pright poutput pidentifier
     |>> (fun name -> RosterShow { RosterToShowName = name }) <!> "rosterShowStmt"
 
+/// Meet Decl
+
+let meetHeader = pright (pright (pseq (pstr "let") (pright pws0 (pstr "meet")) (fun (_, r) -> r)) pws0) pidentifier
+
+let meetEvents =
+    pright (pright pcomma (pstr "events:")) (pright pws0 peventList)
+
+let pnumber = pmany0 pdigit |>> stringify
+
+let psuffix =
+    pbind (pmany1 (psat is_letter) |>> stringify) (fun s ->
+        if Set.contains s suffix then presult s else pzero
+    ) <!> "suffix"
+
+let pplace = pseq (pleft (pseq pnumber psuffix (fun(x, y) -> int x)) pcolon) (pleft pnumber pws0) (fun (x, y) -> {Position = int x; Suffix = y})
+
+let pscoringList = 
+    pseq pplace (pmany0 (pright pcomma pplace))
+        (fun (h, t) -> h :: t) <!> "scoring-list" 
+
+let meetScoring =
+    pright (pright pcomma (pstr "scoring:")) (pright pws0 pscoringList)
+
+let meetBody = pseq meetEvents meetScoring id
+
+let meetDecl = 
+    pseq meetHeader meetBody (fun(x, y) -> {Name = x; Events = fst y; Scoring = snd y})
+
+/// Optimize Parser
+
+/// TODO: optimize parser
+let optimize = pzero
+
+
 /// Statements
 let athleteDeclStmt =
     athleteDecl |>> (fun a -> Athlete a) <!> "athleteDeclStmt"
@@ -108,10 +143,14 @@ let rosterDeclStmt =
 let rosterAddStmt =
     rosterAdd |>> (fun a -> RosterAdd a) <!> "rosterAddStmt"
 
+let meetDeclStmt = meetDecl |>> (fun a -> Meet a) <!> "meetDeclStmt"
+
+let optimizeStmt = optimize |>> (fun o -> Optimize o) <!> "optimizeStmt"
+
 let psemicolon = pright pws0 (pleft (pchar ';') pws0)
 
 let pstatement =
-    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow
+    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> meetDeclStmt <|> optimizeStmt
 
 
 let programParser =
