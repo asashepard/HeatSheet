@@ -82,7 +82,20 @@ let athleteDecl =
 
 
 /// Roster Declaration
-let rosterDecl = pseq (pright (pseq (pstr "let") (pright pws0 (pstr "roster")) (fun (_, r) -> r)) pws0) pidentifier (fun (_, name)-> {Name = name}) <!> "rosterDecl"
+
+let rosterAthletes = pright (pright pcomma (pstr "athletes:")) (pright pws0 pidentifierlist)
+
+let optionalAthletes = rosterAthletes <|> presult []
+
+let rosterHeader =
+    pright
+        (pseq (pstr "let") (pright pws0 (pstr "roster")) (fun (_, r) -> r))
+        pws0
+
+let rosterDecl =
+    pseq (pseq rosterHeader pidentifier (fun (_, name) -> name)) optionalAthletes
+        (fun (name, athletes) -> { Name = name; Athletes = athletes }) <!> "rosterDecl"
+
 
 /// Add to Roster
 
@@ -122,15 +135,39 @@ let pscoringList =
 let meetScoring =
     pright (pright pcomma (pstr "scoring:")) (pright pws0 pscoringList)
 
-let meetBody = pseq meetEvents meetScoring id
+let meetTeams = pright (pright pcomma (pstr "teams:")) (pright pws0 pidentifierlist)
 
-let meetDecl = 
-    pseq meetHeader meetBody (fun(x, y) -> {Name = x; Events = fst y; Scoring = snd y})
+let optionalTeams =
+    meetTeams <|> presult []
+
+
+let meetBody =
+    pseq meetEvents (
+        pseq meetScoring optionalTeams (fun (scoring, teams) -> scoring, teams)
+    ) (fun (events, (scoring, teams)) -> events, scoring, teams)
+
+
+
+let meetDecl =
+    pseq meetHeader meetBody (fun (name, (events, scoring, teams)) ->
+        { Name = name; Events = events; Scoring = scoring; Teams = teams }
+    )
+
+/// Add to Meet
+
+let meetAddTeam = pseq (pright (pstr "add") pws0) (pleft pidentifier pws0) snd
+let meetAddMeet = pseq (pright (pstr "to") pws0) pidentifier snd
+let meetAdd = pseq rosterAddAthlete rosterAddRoster (fun (team, meet)-> {TeamToAdd = team; Meet = meet}) <!> "rosterAdd"
+
 
 /// Optimize Parser
 
-/// TODO: optimize parser
-let optimize = pzero
+let optimizeTeam = 
+    pright (pbetween pws0 (pstr "optimize") pws0) pidentifier
+
+let optimizeMeet = pright (pbetween pws0 (pstr "for") pws0) pidentifier
+
+let optimize = pseq optimizeTeam optimizeMeet (fun (team, meet) -> {Team = team; Meet = meet})
 
 
 /// Statements
@@ -143,6 +180,9 @@ let rosterDeclStmt =
 let rosterAddStmt =
     rosterAdd |>> (fun a -> RosterAdd a) <!> "rosterAddStmt"
 
+let meetAddStmt =
+    meetAdd |>> (fun a -> MeetAdd a) <!> "meetAddStmt"
+
 let meetDeclStmt = meetDecl |>> (fun a -> Meet a) <!> "meetDeclStmt"
 
 let optimizeStmt = optimize |>> (fun o -> Optimize o) <!> "optimizeStmt"
@@ -150,7 +190,7 @@ let optimizeStmt = optimize |>> (fun o -> Optimize o) <!> "optimizeStmt"
 let psemicolon = pright pws0 (pleft (pchar ';') pws0)
 
 let pstatement =
-    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> meetDeclStmt <|> optimizeStmt
+    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt
 
 
 let programParser =

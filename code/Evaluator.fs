@@ -20,7 +20,9 @@ let addAthlete (state: EvalState) (a: AthleteDeclaration) =
     { state with Athletes = state.Athletes.Add(a.Name, a) }
 
 let addRoster (state: EvalState) (r: RosterDeclaration) =
-    { state with Rosters = state.Rosters.Add(r.Name, Set.empty) }
+    let athletes = Set.ofList r.Athletes
+    { state with Rosters = state.Rosters.Add(r.Name, athletes) }
+
 
 let addToRoster (state: EvalState) (ra: RosterAdd) =
     match Map.tryFind ra.Name state.Athletes, Map.tryFind ra.Roster state.Rosters with
@@ -31,6 +33,16 @@ let addToRoster (state: EvalState) (ra: RosterAdd) =
 
 let addMeet (state: EvalState)(m: MeetDeclaration) =
     {state with Meets = state.Meets.Add(m.Name, m)}
+
+let addToMeet (state: EvalState) (ma: MeetAdd) =
+    match Map.tryFind ma.Meet state.Meets with
+    | Some meet ->
+        if List.contains ma.TeamToAdd meet.Teams then state
+        else
+            let updatedMeet = { meet with Teams = ma.TeamToAdd :: meet.Teams }
+            { state with Meets = state.Meets.Add(ma.Meet, updatedMeet) }
+    | None -> state // probably should error here
+
 
 // ---------------------- LaTeX Formatting ----------------------
 
@@ -109,5 +121,8 @@ let eval (prog: Program) : unit =
                     printfn "Roster %s not found" rs.RosterToShowName
                     state, lastPdf
             | Meet m -> addMeet state m, lastPdf
+            | MeetAdd ma -> addToMeet state ma, lastPdf
+            | Optimize o -> state, lastPdf
+
         ) (emptyState, None) prog
     ()

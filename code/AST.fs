@@ -22,7 +22,9 @@ type AthleteDeclaration = {
 
 type RosterDeclaration = {
     Name: Identifier
+    Athletes: Identifier list
 }
+
 
 type RosterToShow = {
     RosterToShowName: Identifier
@@ -33,14 +35,20 @@ type RosterAdd = {
     Roster: Identifier
 }
 
+type MeetAdd = {
+    TeamToAdd: Identifier
+    Meet: Identifier
+}
+
 type MeetDeclaration = {
     Name: Identifier
     Events: Identifier list
     Scoring: Place list
+    Teams: Identifier list
 }
 
 type Optimize = {
-    Teams: Identifier list
+    Team: Identifier
     Meet: Identifier
 }
 
@@ -51,5 +59,6 @@ type Statement =
     | RosterShow of RosterToShow
     | Meet of MeetDeclaration
     | Optimize of Optimize
+    | MeetAdd of MeetAdd
 
 type Program = Statement list
