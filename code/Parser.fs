@@ -119,7 +119,6 @@ let programParser =
         (pseq pstatement (pmany0 (pright psemicolon pstatement)) (fun (s, rest) -> s :: rest)) psemicolon
 
 
-
 let parse s =
     let prog = prepare s
     let parser = pleft programParser (pright pws0 peof)
