@@ -3,18 +3,30 @@
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{tabularx}
-\usepackage{booktabs}
 \usepackage{siunitx}
-\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\usepackage[table]{xcolor}
+\usepackage{titlesec}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\titleformat{\section}{\Large\bfseries\centering}{}{0em}{}
+\definecolor{rowgray}{gray}{0.95}
 \begin{document}
 \section*{Roster: Williams}
-\begin{tabularx}{\textwidth}{lXl}
-\toprule
-\textbf{Name} & \textbf{Events} & \textbf{PRs} \\
-\midrule
-AsaShepard & 400m, 800m, 4x400m & 800m: 1:50.00, 400m: 48.00 \\
-ColinStone & 200m, 400m, 4x400m & 400m: 49.15, 200m: 22.97 \\
-YanniKakouris & 100m, 200m, 4x100m & 100m: 11.01, 200m: 22.42 \\
 \bottomrule
 \end{tabularx}
+AsaShepard & 200m & 21.89 \\
+& 400m & 48.60 \\
+& 800m &  \\
+& \textit{1500} & 0:25.00 \\
+& \textit{somelongevent} & 0:1.00 \\
+\midrule
+YanniKakouris & 100m & 11.01 \\
+& 200m & 22.42 \\
+& 400m & 55.00 \\
+\midrule
+\rowcolors{2}{gray!10}{white}
+\begin{tabularx}{\textwidth}{lXr}
+\toprule
+\textbf{Name} & \textbf{Event} & \textbf{PR} \\
+\midrule
 \end{document}

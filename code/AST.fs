@@ -18,6 +18,17 @@ type AthleteDeclaration = {
     PRs: PR list
 }
 
+type AthleteUpdate = {
+    UpdateName: Identifier
+    NewEvents: Identifier list
+    NewPRs: PR list
+}
+
+type SetPR = {
+    Name: Identifier
+    NewPR: PR
+}
+
 type RosterDeclaration = {
     Name: Identifier
     Athletes: Identifier list
@@ -28,8 +39,17 @@ type RosterToShow = {
     RosterToShowName: Identifier
 }
 
+type MeetToShow = {
+    MeetToShowName: Identifier
+}
+
 type RosterAdd = {
-    Name: Identifier
+    AthleteToAdd: Identifier
+    Roster: Identifier
+}
+
+type RosterRemoval = {
+    AthleteToRemove: Identifier
     Roster: Identifier
 }
 
@@ -38,11 +58,18 @@ type MeetAdd = {
     Meet: Identifier
 }
 
+type MeetRemoval = {
+    TeamToRemove: Identifier
+    Meet: Identifier
+}
+
+
 type MeetDeclaration = {
     Name: Identifier
     Events: Identifier list
     Scoring: ScoreEntry list
     Teams: Identifier list
+    MaxAthletesPerEvent: int option
 }
 
 type Optimize = {
@@ -52,9 +79,13 @@ type Optimize = {
 
 type Statement =
     | Athlete of AthleteDeclaration
+    | AthleteUpdate of AthleteUpdate
+    | PRChange of SetPR
+    | RosterRemoval of RosterRemoval
     | Roster of RosterDeclaration
     | RosterAdd of RosterAdd
     | RosterShow of RosterToShow
+    | MeetShow of MeetToShow
     | Meet of MeetDeclaration
     | Optimize of Optimize
     | MeetAdd of MeetAdd

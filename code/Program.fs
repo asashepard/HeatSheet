@@ -13,7 +13,7 @@ let main args =
     if args.Length <> 1 then usage()
     let fileContents = System.IO.File.ReadAllText(args[0])
     let result = parse fileContents
-    printfn "%A" result
+    //printfn "%A" result
     match result with
     | Some p -> 
         printfn "%A" (eval p)

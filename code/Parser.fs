@@ -5,7 +5,7 @@ open AST
 
 
 /// Identifer Parser
-let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster"; "scoring"; "include"; "in" ]
+let reserved = Set.ofList [ "prs"; "events"; "athlete"; "let"; "roster"; "scoring"; "include"; "in"; "to"; "remove"; "from"; "maxEventsPerAthlete"]
 let suffix = Set.ofList [ "st"; "nd"; "rd"; "th" ]
 
 let pidentifier =
@@ -25,6 +25,9 @@ let pcomma = pbetween pws0 (pchar ',') pws0
 let pidentifierlist = 
     pseq pidentifier (pmany0 (pright pcomma pidentifier)) (fun (first, rest) -> first :: rest)
 
+
+/// Padder
+let pad p = pbetween pws0 p pws0
 
 /// List of events
 let peventList =
@@ -61,7 +64,6 @@ let prList: Parser<PR list> =
         (fun (h, t) -> h :: t) <!> "prList"
 
 
-
 /// Athlete Declaration
 let athleteHeader = pright (pright (pseq (pstr "let") (pright pws0 (pstr "athlete")) (fun (_, r) -> r)) pws0) pidentifier
 
@@ -80,6 +82,23 @@ let athleteDecl =
          (fun (name, (events, prs)) -> { Name = name; Events = events; PRs = prs }) <!> "athleteDecl"
 
 
+/// Athlete Update
+let athleteUpdateHeader = pright (pright (pseq (pstr "update") (pright pws0 (pstr "athlete")) (fun (_, r) -> r)) pws0) pidentifier
+
+let athleteUpdate =
+    pseq athleteUpdateHeader athleteBody
+         (fun (name, (events, prs)) -> { UpdateName = name; NewEvents = events; NewPRs = prs }) <!> "athleteUpdate"
+
+
+/// Change a PR
+
+let athleteToChangePR = pright (pad (pstr "set")) pidentifier
+
+let timeToChangePR = pright (pad (pstr "to")) ptime
+
+let eventToChangePR = pright (pad (pstr "in")) pidentifier
+
+let changePR = pseq athleteToChangePR (pseq timeToChangePR eventToChangePR id) (fun(athlete, eventTime) -> {Name = athlete; NewPR = {Event = snd eventTime; Time = fst eventTime}}) 
 
 /// Roster Declaration
 
@@ -97,20 +116,28 @@ let rosterDecl =
         (fun (name, athletes) -> { Name = name; Athletes = athletes }) <!> "rosterDecl"
 
 
-/// Add to Roster
+/// Add to and remove from roster
 
 let rosterAddAthlete = pseq (pright (pstr "add") pws0) (pleft pidentifier pws0) snd
-let rosterAddRoster = pseq (pright (pstr "to") pws0) pidentifier snd
-let rosterAdd = pseq rosterAddAthlete rosterAddRoster (fun (name, roster)-> {Name = name; Roster = roster}) <!> "rosterAdd"
+let rosterToAddTo = pseq (pright (pstr "to") pws0) pidentifier snd
+let rosterAdd = pseq rosterAddAthlete rosterToAddTo (fun (name, roster)-> RosterAdd{AthleteToAdd = name; Roster = roster}) <!> "rosterAdd"
 
+let rosterRemoveAthlete = pseq (pad (pstr "remove")) (pad pidentifier) snd
+let rosterToRemoveFrom = pseq (pad (pstr "from") ) (pad pidentifier) snd
+let rosterRemoval = pseq rosterRemoveAthlete rosterToRemoveFrom (fun (name, roster)-> RosterRemoval{AthleteToRemove = name; Roster = roster}) <!> "rosterRemoval"
 
 /// Output Roster
 let poutput =
-    pright (pstr "output") pws0
+    pright (pad (pstr "output")) pws0
 
 let rosterShow =
-    pright poutput pidentifier
+    pright (pright poutput (pad (pstr "roster"))) pidentifier
     |>> (fun name -> RosterShow { RosterToShowName = name }) <!> "rosterShowStmt"
+
+/// Output Meet
+let meetShow =
+    pright (pright poutput (pad (pstr "meet"))) pidentifier
+    |>> (fun name -> MeetShow { MeetToShowName = name }) <!> "meetShowStmt"
 
 /// Meet Decl
 
@@ -140,27 +167,37 @@ let meetTeams = pright (pright pcomma (pstr "teams:")) (pright pws0 pidentifierl
 let optionalTeams =
     meetTeams <|> presult []
 
+let optionalMaxAthletes = 
+    pright (pright pcomma (pstr "maxEventsPerAthlete:")) (pright pws0 pnumber)
+    |>> (fun n -> Some(int n))
+    <|> presult None
+
+
+let meetDeclarationOptionals = pseq optionalTeams optionalMaxAthletes id
 
 let meetBody =
     pseq meetEvents (
-        pseq meetScoring optionalTeams (fun (scoring, teams) -> scoring, teams)
-    ) (fun (events, (scoring, teams)) -> events, scoring, teams)
-
+        pseq meetScoring meetDeclarationOptionals (fun (scoring, optionals) -> scoring, optionals)
+    ) (fun (events: string list, (scoring, optionals)) -> events, scoring, fst optionals, snd optionals)
 
 
 let meetDecl =
-    pseq meetHeader meetBody (fun (name, (events, scoring, teams)) ->
-        { Name = name; Events = events; Scoring = scoring; Teams = teams }
+    pseq meetHeader meetBody (fun (name, (events, scoring, teams, maxEventsPerAthlete)) ->
+        { Name = name; Events = events; Scoring = scoring; Teams = teams; MaxAthletesPerEvent = maxEventsPerAthlete}
     )
 
 /// Add to Meet
 
-let meetAddTeam = pseq (pright (pstr "include") pws0) (pleft pidentifier pws0) snd
-let meetAddMeet = pseq (pright (pstr "in") pws0) pidentifier snd
-let meetAdd = pseq meetAddTeam meetAddMeet (fun (team, meet)-> {TeamToAdd = team; Meet = meet}) <!> "meetAdd"
+let meetAddTeam = pseq (pad (pstr "include")) (pleft pidentifier pws0) snd
+let meetToAddTo = pseq (pright (pstr "in") pws0) pidentifier snd
+let meetAdd = pseq meetAddTeam meetToAddTo (fun (team, meet)-> {TeamToAdd = team; Meet = meet}) <!> "meetAdd"
+
+/// Remove from Meet
+
+let meetRemoveTeam = pseq (pad (pstr "exclude")) (pleft pidentifier pws0) snd
 
 
-/// Optimize Parser
+/// Optimizer
 
 let optimizeTeam = 
     pright (pbetween pws0 (pstr "optimize") pws0) pidentifier
@@ -171,26 +208,25 @@ let optimize = pseq optimizeTeam optimizeMeet (fun (team, meet) -> {Team = team;
 
 
 /// Statements
-let athleteDeclStmt =
-    athleteDecl |>> (fun a -> Athlete a) <!> "athleteDeclStmt"
+let athleteDeclStmt = athleteDecl |>> Athlete <!> "athleteDeclStmt"
+let rosterDeclStmt = rosterDecl  |>> Roster  <!> "rosterDeclStmt"
+let rosterAddStmt = rosterAdd <!> "rosterAddStmt"
 
-let rosterDeclStmt =
-    rosterDecl  |>> (fun r -> Roster r)  <!> "rosterDeclStmt"
+let rosterRemoveStmt = rosterRemoval <!> "rosterRemoveStmt"
 
-let rosterAddStmt =
-    rosterAdd |>> (fun a -> RosterAdd a) <!> "rosterAddStmt"
-
-let meetAddStmt =
-    meetAdd |>> (fun a -> MeetAdd a) <!> "meetAddStmt"
-
-let meetDeclStmt = meetDecl |>> (fun a -> Meet a) <!> "meetDeclStmt"
-
-let optimizeStmt = optimize |>> (fun o -> Optimize o) <!> "optimizeStmt"
+let meetAddStmt = meetAdd |>> MeetAdd <!> "meetAddStmt"
+let athleteUpdateStmt = athleteUpdate |>> AthleteUpdate <!> "athleteUpdateStmt"
+let PRChangeStmt = changePR |>> PRChange <!> "prChangeStmt"
+let meetDeclStmt = meetDecl |>> Meet <!> "meetDeclStmt"
+let optimizeStmt = optimize |>> Optimize <!> "optimizeStmt"
 
 let psemicolon = pright pws0 (pleft (pchar ';') pws0)
 
 let pstatement =
-    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt
+    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> 
+    meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt <|> 
+    athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow
+
 
 
 let programParser =
