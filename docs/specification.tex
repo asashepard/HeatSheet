@@ -218,6 +218,10 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
 
   <output>                ::= output <roster>
                             | output <meet>
+                            | output <roster> to <path>
+                            | output <meet> to <path>
+  
+  <path>                  ::= <path> ::= (<Letter> | <Digit> | "." | "/" | "_" | "-")+
 
   <optimize>              ::= optimize <roster> for <meet>
 

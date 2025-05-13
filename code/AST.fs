@@ -38,10 +38,12 @@ type RosterDeclaration = {
 
 type RosterToShow = {
     RosterToShowName: Identifier
+    Path: string option
 }
 
 type MeetToShow = {
     MeetToShowName: Identifier
+    Path: string option
 }
 
 type RosterAdd = {

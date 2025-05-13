@@ -150,15 +150,29 @@ let rosterRemoval = pseq rosterRemoveAthlete rosterToRemoveFrom (fun (name, rost
 /// Parses output keyword
 let poutput =pad (pstr "output")
 
+/// Parses characters that can be used in a file path
+let is_path_char c =
+    is_letter c || is_digit c || c = '/' || c = '.' || c = '_' || c = '-'
+
+/// Parses a file path
+let ppath = pbetween (pright pws0 (pchar '"')) (pmany1 (psat is_path_char)) (pright pws0 (pchar '"')) |>> stringify
+
+/// Output to this path
+let outputPath = pright (pad (pstr "to")) ppath
+
+/// Makes the file path optional
+let pathOptional = outputPath |>> Some <|> presult None
+
 /// Output roster
 let rosterShow =
-    pright (pright poutput (pad (pstr "roster"))) pidentifier
-    |>> (fun name -> RosterShow{ RosterToShowName = name }) <!> "rosterShowStmt"
+    pseq (pright (pright poutput (pad (pstr "roster"))) pidentifier) pathOptional
+        (fun (name, path) -> RosterShow { RosterToShowName = name; Path = path }) <!> "rosterShowStmt"
 
-/// Output Meet
+/// Output meet
 let meetShow =
-    pright (pright poutput (pad (pstr "meet"))) pidentifier
-    |>> (fun name -> MeetShow{ MeetToShowName = name }) <!> "meetShowStmt"
+    pseq (pright (pright poutput (pad (pstr "meet"))) pidentifier) pathOptional
+        (fun (name, path) -> MeetShow { MeetToShowName = name; Path = path }) <!> "meetShowStmt"
+
 
 /// Parses meet declaration keywords
 let meetHeader = pright (pseq (pad (pstr "let")) (pad (pstr "meet")) snd) (pad pidentifier)

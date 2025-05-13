@@ -31,4 +31,4 @@ include Amherst in NESCACs;
 
 duplicate athlete YanniKakouris to YanniKakouris2;
 add YanniKakouris2 to Williams;
-output roster Williams;
+output roster Williams to "some_sort_of_roster";

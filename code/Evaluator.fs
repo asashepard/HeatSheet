@@ -284,12 +284,13 @@ let buildRosterLatexDocument (state: EvalState) (roster: string) (athletes: Set<
     ]
 
 /// Generates LaTeX document for the roster, based on the string returned from above functions
-let generateLatexRosterShow (state: EvalState) (roster: Identifier) : string option =
+let generateLatexRosterShow (state: EvalState) (roster: Identifier) (path: string option) : string option =
     match Map.tryFind roster state.Rosters with
     | None -> RNF roster
     | Some athletes ->
         let tex = buildRosterLatexDocument state roster athletes
-        Some (runPdfLatex tex "." (roster + "_roster"))
+        let filename = defaultArg path (roster + "_roster")
+        Some (runPdfLatex tex "." filename)
 
 // ----------------------- LaTeX Formatting for MeetShow --------------------------
 
@@ -380,13 +381,13 @@ let buildMeetLatexDocument (state: EvalState) (meet: MeetDeclaration) : string =
     )
 
 /// Generates the meet LaTeX file using the current state and a meet ID
-let generateLatexMeetShow (state: EvalState) (meetId: Identifier) : string option =
+let generateLatexMeetShow (state: EvalState) (meetId: Identifier) (path: string option) : string option =
     match Map.tryFind meetId state.Meets with
     | None -> MNF meetId
     | Some meet ->
         let tex = buildMeetLatexDocument state meet
-        Some (runPdfLatex tex "." (meetId + "_meet"))
-
+        let filename = defaultArg path (meetId + "_meet")
+        Some (runPdfLatex tex "." filename)
 
 // ----------------------- Optimizer --------------------------
 
@@ -548,21 +549,14 @@ let generateLatexOptimization (state: EvalState) (optimization: Optimization) : 
 // --------------------  Evaluation Helpers ----------------------
 
 /// Main function for the roster show call
-/// TODO: incorporate a path parameter
 let rosterShow state rs =
-    match generateLatexRosterShow state rs.RosterToShowName with
-    | Some path ->
-        // printfn "PDF generated at: %s" path
-        state, Some path
+    match generateLatexRosterShow state rs.RosterToShowName rs.Path with
+    | Some path -> state, Some path
     | None -> RNF rs.RosterToShowName
 
-/// Main function for the meet show call
-/// TODO: incorporate a path parameter
-let meetShow state ms=
-    match generateLatexMeetShow state ms.MeetToShowName with
-    | Some path ->
-        // printfn "PDF generated at: %s" path
-        state, Some path
+let meetShow state ms =
+    match generateLatexMeetShow state ms.MeetToShowName ms.Path with
+    | Some path -> state, Some path
     | None -> MNF ms.MeetToShowName
 
 // Runs the optimization statment
