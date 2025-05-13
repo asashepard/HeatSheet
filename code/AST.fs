@@ -24,6 +24,7 @@ type AthleteUpdate = {
     NewPRs: PR list
 }
 
+
 type SetPR = {
     Name: Identifier
     NewPR: PR
@@ -72,6 +73,28 @@ type MeetDeclaration = {
     MaxAthletesPerEvent: int option
 }
 
+type DuplicateAthlete = {
+    AthleteToDuplicate: Identifier
+    NewIdentifier: Identifier
+}
+
+type DuplicateMeet = {
+    MeetToDuplicate: Identifier
+    NewIdentifier: Identifier
+}
+
+
+type DuplicateRoster = {
+    RosterToDuplicate: Identifier
+    NewIdentifier: Identifier
+}
+
+type Duplicate = 
+| DuplicateAthlete of DuplicateAthlete
+| DuplicateRoster of DuplicateRoster
+| DuplicateMeet of DuplicateMeet
+
+
 type Optimize = {
     Team: Identifier
     Meet: Identifier
@@ -90,5 +113,6 @@ type Statement =
     | Optimize of Optimize
     | MeetAdd of MeetAdd
     | MeetRemoval of MeetRemoval
+    | Duplicate of Duplicate
 
 type Program = Statement list

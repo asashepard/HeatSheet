@@ -222,6 +222,27 @@ let meetToRemoveFrom = pseq (pad (pstr "from")) (pad pidentifier) snd
 /// Parses a complete remove from meet statement
 let meetRemoval = pseq meetRemoveTeam meetToRemoveFrom (fun (team, meet)-> {TeamToRemove = team; Meet = meet}) <!> "meetAdd"
 
+/// Parses the word duplicate
+let duplicate = pad (pstr "duplicate")
+
+/// Parses the identifer that we duplicate to
+let thingToDuplicate = pright(pad(pstr "to")) (pad pidentifier)
+
+/// Parses an athlete duplication
+let duplicateAthlete = pseq (pright duplicate (pad(pstr "athlete"))) pidentifier id
+
+/// Parses a roster duplication
+let duplicateRoster = pseq (pright duplicate (pad(pstr "roster"))) pidentifier id
+
+/// Parses a meet duplication
+let duplicateMeet = pseq (pright duplicate (pad(pstr "meet"))) pidentifier id
+
+/// Parses the type of duplication
+let duplicationType = duplicateAthlete <|> duplicateRoster <|> duplicateMeet
+
+/// Parses the actual duplication statement
+let duplication = pseq duplicationType thingToDuplicate id
+
 /// Parses the team to optimize
 let optimizeTeam = pright (pad (pstr "optimize")) pidentifier
 
@@ -242,10 +263,19 @@ let PRChangeStmt = changePR |>> PRChange <!> "prChangeStmt"
 let meetDeclStmt = meetDecl |>> Meet <!> "meetDeclStmt"
 let meetRemoveStmt = meetRemoval |>> MeetRemoval <!> "meetRemoveStmt"
 let optimizeStmt = optimize |>> Optimize <!> "optimizeStmt"
+let duplicationStmt =
+    duplication |>> (fun ((typ, orig), newName) ->
+        match typ with
+        | "athlete" -> Duplicate(DuplicateAthlete {AthleteToDuplicate = orig; NewIdentifier = newName})
+        | "roster" -> Duplicate(DuplicateRoster {RosterToDuplicate = orig; NewIdentifier = newName})
+        | "meet" -> Duplicate(DuplicateMeet {MeetToDuplicate = orig; NewIdentifier = newName})
+        | _ -> failwith "unreachable"  // typ only comes from duplicationType, so this is safe
+    ) <!> "duplicationStmt"
+
 let pstatement =
     athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> 
     meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt <|> 
-    athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow
+    athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow <|> duplicationStmt
 
 /// Parses a list of statements, requiring semicolons after each
 let programParser =

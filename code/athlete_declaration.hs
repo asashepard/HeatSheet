@@ -1,9 +1,34 @@
-let athlete alice, events: 100m,200m, prs: 100m:12.34,200m:25.67;
-let athlete bob, events: 100m,400m, prs: 100m:11.89,400m:54.32;
-let athlete charlie, events: 800m,1600m, prs: 800m:2:10.5,1600m:4:45.2;
-let roster varsity, athletes: alice,bob,charlie;
-let meet states, events: 100m,200m,400m,800m,1600m, scoring: 1st:10,2nd:8,3rd:6,4th:5,5th:4,6th:3,7th:2,8th:1;
-include varsity in states;
-optimize varsity for states;
-output roster varsity;
-output meet states;
+let athlete YanniKakouris,
+    events: 100m, 200m, 400m,
+    prs: 100m: 11.01, 200m: 22.5;
+
+let athlete ColinStone,
+    events: 200m, 400m,
+    prs: 200m: 22.97, 400m: 49.13;
+
+let roster Williams,
+    athletes: YanniKakouris, ColinStone;
+
+let athlete Amherst1,
+    events: 200m, 400m,
+    prs: 200m: 22.97, 400m: 49.13;
+
+let athlete Amherst2,
+    events: 100m, 200m, 400m, 800m,
+    prs: 100m: 11.10, 200m: 22.49, 400m: 44, 800m: 1:55;
+
+let roster Amherst;
+add Amherst1 to Amherst;
+add Amherst2 to Amherst;
+
+let meet NESCACs,
+    events: 100m, 200m, 400m,
+    scoring: 1st: 10, 2nd: 5, 3rd: 1,
+    maxEventsPerAthlete: 2;
+
+include Williams in NESCACs;
+include Amherst in NESCACs;
+
+duplicate athlete YanniKakouris to YanniKakouris2;
+add YanniKakouris2 to Williams;
+output roster Williams;

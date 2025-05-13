@@ -157,19 +157,20 @@ Coaches can impose constraints to model the realities of competition, such as li
 HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets.
 
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
-  program             ::= <statement>;+
+  program                 ::= <statement>;+
 
-  statement           ::= <roster-declaration>
-                       | <athlete-declaration>
-                       | <athlete-update>
-                       | <set-PR>
-                       | <meet-declaration>
-                       | <meet-add>
-                       | <meet-remove>
-                       | <roster-add>
-                       | <roster-removal>
-                       | <output>
-                       | <optimize>
+  statement               ::= <roster-declaration>
+                            | <athlete-declaration>
+                            | <athlete-update>
+                            | <athlete-duplicate>
+                            | <set-PR>
+                            | <meet-declaration>
+                            | <meet-add>
+                            | <meet-remove>
+                            | <roster-add>
+                            | <roster-removal>
+                            | <output>
+                            | <optimize>
 
   <roster-declaration>    ::= let roster <Identifier>
                             | let roster <Identifier>, 
@@ -186,6 +187,16 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
                             | update athlete <Identifier>,
                               events: <event-list>,
                               PRs: <pr-list>
+
+  <duplicate>             ::= <athlete-duplicate>
+                            | <roster-duplicate>
+                            | <meet-duplicate>
+
+  <athlete-duplicate>     ::= duplicate <athlete> to <Identifier>
+
+  <roster-duplicate>      ::= duplicate <roster> to <Identifier>
+
+  <meet-duplicate>        ::= duplicate <meet> to <Identifier>
   
   <set-PR>                ::= set <athlete> to <time> in <event>
 

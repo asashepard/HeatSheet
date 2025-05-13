@@ -130,6 +130,27 @@ let changePR (state: EvalState) (pc: SetPR) =
         { state with Athletes = state.Athletes.Add(pc.Name, updatedAthlete) }
     | None -> ANF pc.Name
 
+/// duplicates the athlete, roster, or meet
+let duplicate state d = 
+    match d with
+    | DuplicateAthlete da -> 
+        match Map.tryFind da.AthleteToDuplicate state.Athletes with
+        | Some athlete -> 
+            let copied = { athlete with Name = da.NewIdentifier }
+            { state with Athletes = state.Athletes.Add(da.NewIdentifier, copied) }
+        | None -> ANF da.AthleteToDuplicate
+    | DuplicateRoster dr -> 
+        match Map.tryFind dr.RosterToDuplicate state.Rosters with
+        | Some roster -> 
+            { state with Rosters = state.Rosters.Add(dr.RosterToDuplicate, roster) }
+        | None -> RNF dr.RosterToDuplicate
+    | DuplicateMeet dm -> 
+        match Map.tryFind dm.MeetToDuplicate state.Meets with
+        | Some meet -> 
+            let copied = { meet with Name = dm.NewIdentifier }
+            { state with Meets = state.Meets.Add(dm.NewIdentifier, copied) }
+        | None -> MNF dm.MeetToDuplicate
+
 
 // --------------------------------------- LaTeX Formatting Helpers ------------------------------------
 
@@ -504,7 +525,6 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
           "\\end{tabularx}" ]
     )
 
-
 /// Constructs the full LaTeX document string for a meet
 let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimization) : string =
     let header = latexHeaderMeet
@@ -525,7 +545,6 @@ let generateLatexOptimization (state: EvalState) (optimization: Optimization) : 
     let tex = buildOptimizationLatexDocument state optimization
     Some (runPdfLatex tex "." (optimization.meet.Name + "_meet_optimization"))
         
-
 // --------------------  Evaluation Helpers ----------------------
 
 /// Main function for the roster show call
@@ -558,24 +577,24 @@ let optimize (state: EvalState) (o: Optimize) =
     | None, Some _ ->   MNF o.Meet
     | None, None ->     failwith $"Error: Meet {o.Meet} and roster {o.Team} not found."
 
-
 // ----------------------  Evaluation ----------------------
 
 let eval (prog: Program) =
-    let finalState, _ =
-        List.fold (fun (state, lastPdf) stmt ->
+    let finalState =
+        List.fold (fun state stmt ->
             match stmt with
-            | Athlete a->      declareAthlete state a, lastPdf
-            | AthleteUpdate a ->    updateAthlete state a, lastPdf
-            | PRChange pc ->                changePR state pc, lastPdf
-            | Roster r->        declareRoster state r, lastPdf
-            | RosterAdd ra->            addToRoster state ra, lastPdf
-            | RosterRemoval rm ->   removeFromRoster state rm, lastPdf
-            | RosterShow rs->        rosterShow state rs
-            | MeetShow ms ->           meetShow state ms
-            | Meet m ->           declareMeet state m, lastPdf
-            | MeetAdd ma ->               addToMeet state ma, lastPdf
-            | MeetRemoval mr ->       removeFromMeet state mr, lastPdf
-            | Optimize o ->              optimize state o
-        ) (emptyState, None) prog
+            | Athlete a -> declareAthlete state a
+            | AthleteUpdate a -> updateAthlete state a
+            | PRChange pc -> changePR state pc
+            | Roster r -> declareRoster state r
+            | RosterAdd ra -> addToRoster state ra
+            | RosterRemoval rm -> removeFromRoster state rm
+            | Meet m -> declareMeet state m
+            | MeetAdd ma -> addToMeet state ma
+            | MeetRemoval mr -> removeFromMeet state mr
+            | Duplicate d -> duplicate state d
+            | RosterShow rs -> fst (rosterShow state rs)
+            | MeetShow ms -> fst (meetShow state ms)
+            | Optimize o -> fst (optimize state o)
+        ) emptyState prog
     0
