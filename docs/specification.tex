@@ -157,39 +157,56 @@ Coaches can impose constraints to model the realities of competition, such as li
 HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets.
 
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
-  program             ::= <statement> ;+
+  program             ::= <statement>;+
 
   statement           ::= <roster-declaration>
                        | <athlete-declaration>
+                       | <athlete-update>
+                       | <set-PR>
                        | <meet-declaration>
                        | <meet-add>
+                       | <meet-remove>
                        | <roster-add>
+                       | <roster-removal>
                        | <output>
                        | <optimize>
 
   <roster-declaration>    ::= let roster <Identifier>
-                           | let roster <Identifier>, 
-                             athletes: <athlete-list>
+                            | let roster <Identifier>, 
+                              athletes: <athlete-list>
 
   <athlete-declaration>   ::= let athlete <Identifier>,
                               events: <event-list>
-                           | let athlete <Identifier>,
-                             events: <event-list>,
-                             PRs: <pr-list>
+                            | let athlete <Identifier>,
+                              events: <event-list>,
+                              PRs: <pr-list>
+
+  <athlete-update>        ::= update athlete <Identifier>,
+                              events: <event-list>
+                            | update athlete <Identifier>,
+                              events: <event-list>,
+                              PRs: <pr-list>
+  
+  <set-PR>                ::= set <athlete> to <time> in <event>
 
   <meet-declaration>      ::= let meet <Identifier>,
                               events: <event-list>,
                               scoring: <scoring-list>
-                           | let meet <Identifier>,
-                             events: <event-list>,
-                             scoring: <scoring-list>,
-                             teams: <roster-list>
+                            | let meet <Identifier>,
+                              events: <event-list>,
+                              scoring: <scoring-list>,
+                              teams: <roster-list>
 
-  <meet-add>              ::= include <roster-list> in <meet>
+  <meet-add>              ::= include <roster> in <meet>
+
+  <meet-remove>           ::= exclude <roster> from <meet>
 
   <roster-add>            ::= add <athlete> to <roster>
 
+  <roster-removal>        ::= remove <athlete> from <roster>
+
   <output>                ::= output <roster>
+                            | output <meet>
 
   <optimize>              ::= optimize <roster> for <meet>
 

@@ -3,7 +3,7 @@ module Evaluator
 open AST
 open LatexCreator
 
-// ----------------------  Environment ----------------------
+// --------------------------------  Environment ------------------------------
 
 type EvalState = {
     // All the declared athlete variables
@@ -16,6 +16,16 @@ type EvalState = {
     // All the declared meets. 
     Meets: Map<Identifier, MeetDeclaration>
 }
+
+type Assignment = (Identifier * Identifier) list
+type Optimization = {
+    meet: MeetDeclaration
+    team: Identifier
+    assignment: Assignment
+    bestScore: int
+}
+
+
 
 let emptyState = {
     Athletes = Map.empty
@@ -92,6 +102,20 @@ let addToMeet (state: EvalState) (ma: MeetAdd) =
     | None, Some _ -> MNF ma.Meet
     | None, None -> failwith $"Error: Meet {ma.Meet} and roster {ma.TeamToAdd} not found."
 
+/// Removes a roster from a meet
+let removeFromMeet (state: EvalState) (mr: MeetRemoval) =
+    match Map.tryFind mr.Meet state.Meets, Map.tryFind mr.TeamToRemove state.Rosters with
+    | Some meet, Some roster ->
+        if List.contains mr.TeamToRemove meet.Teams then 
+            let updatedMeet = { meet with Teams = List.filter ((<>) mr.TeamToRemove) meet.Teams }
+            { state with Meets = state.Meets.Add(mr.Meet, updatedMeet) }
+        else failwith $"Error: Roster {mr.TeamToRemove} not in meet {mr.Meet}."
+
+    | Some _, None -> RNF mr.TeamToRemove
+    | None, Some _ -> MNF mr.Meet
+    | None, None -> failwith $"Error: Meet {mr.Meet} and roster {mr.TeamToRemove} not found."
+
+
 /// Updates and or adds a PR for a specific event for an athlete
 let changePR (state: EvalState) (pc: SetPR) =
     match Map.tryFind pc.Name state.Athletes with
@@ -105,110 +129,9 @@ let changePR (state: EvalState) (pc: SetPR) =
         printfn "%A" updatedAthlete
         { state with Athletes = state.Athletes.Add(pc.Name, updatedAthlete) }
     | None -> ANF pc.Name
-    
-// ---------------------- Optimizer -----------------------------------
- 
-type Assignment = (Identifier * Identifier) list
-
-// Expands the roster's athletes personal records into a list
-let expandPRs (assignment: Assignment) (state: EvalState) : (Identifier * Identifier * Time) list =
-    assignment
-    |> List.choose (fun (athlete, event) ->
-        match Map.tryFind athlete state.Athletes with
-        | Some a ->
-            match List.tryFind (fun pr -> pr.Event = event) a.PRs with 
-            | Some pr -> Some (athlete, event, pr.Time)
-            | None -> None
-        | None -> None
-    )
-
-// Gets a list of all of the opponents' personal records
-let getOpponentPRs opponents=
-    opponents |> List.collect (fun a -> a.PRs |> List.map (fun pr -> (a.Name, pr.Event, pr.Time)))
-
-// Converts times into seconds for scoring purposes
-let scoreTime = function
-    | Float f -> f
-    | MinuteTime (m, s) -> m * 60.0 + s
 
 
-let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) : int =
-    entries
-    |> List.sortBy (fun (_, _, t) -> scoreTime t)
-    |> List.mapi (fun i (athlete, _, _) ->
-        if i < List.length meet.Scoring then
-            let pts = meet.Scoring.[i].Score
-            if Set.contains athlete yourRoster then pts else 0
-        else 0
-    )
-    |> List.sum
-
-let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) (opponents: AthleteDeclaration list) : int =
-    let allEntries =
-        let yourEntries = expandPRs assignment state
-        let opponentEntries = getOpponentPRs opponents
-        yourEntries @ opponentEntries
-
-    allEntries
-    |> List.groupBy (fun (_, event, _) -> event)
-    |> List.sumBy (fun (_, entries) -> scoreEvent entries meet yourRoster)
-
-// Gets a list of all opposing athletes
-let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: EvalState) : AthleteDeclaration list =
-    meet.Teams
-    |> List.filter ((<>) yourTeam)
-    |> List.collect (fun rosterName ->
-        state.Rosters |> Map.tryFind rosterName |> function
-        | Some roster -> roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
-        | None -> []
-    )
-
-// Generates all possible assignments for athlete, event combinations
-let generateAssignments (athletes: AthleteDeclaration list) (events: Identifier list) : Assignment list =
-    let possibleEntries =
-        athletes
-        |> List.collect (fun a ->
-            a.Events |> List.filter (fun e -> List.contains e events) |> List.map (fun e -> (a.Name, e)))
-    let powerset xs =
-        let folder acc x = List.fold (fun acc' subset -> (x :: subset) :: acc') acc acc
-        List.fold folder [ [] ] xs
-    powerset possibleEntries
-
-// Computes the optimal athlete to event assignments. 
-// Assumptions: 
-//      1. All opposing athletes run every event that they have a PR in
-//      2. Our athletes can run as many events as they want, as long as they satisfy meet requirements
-//      3. Athletes always run their PRs
-let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Identifier>) (team: Identifier) : EvalState =
-    let athletes = roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
-    let opponents = getOpposingAthletes meet team state
-    let assignments = 
-        let allPossibleAssignments = generateAssignments athletes meet.Events
-        match meet.MaxAthletesPerEvent with
-        | Some max -> allPossibleAssignments |> List.filter (fun assignment ->
-                assignment |> List.countBy fst |> List.forall (fun (_, count) -> count <= max)
-            )
-        | None -> allPossibleAssignments
-    let bestAssignment, bestScore =
-        assignments
-        |> List.map (fun a -> a, scoreAssignment a state meet roster opponents)
-        |> List.maxBy snd
-    
-    // for now, we just print out to the console
-    printfn "Best score: %d" bestScore
-    printfn "Best assignment: %A" bestAssignment
-    state
-
-// Runs the optimization statment
-let optimize (state: EvalState) (o: Optimize) : EvalState =
-    match Map.tryFind o.Meet state.Meets, Map.tryFind o.Team state.Rosters with
-    | Some meet, Some roster -> runOptimization state meet roster o.Team
-    | Some _, None ->   RNF o.Team
-    | None, Some _ ->   failwith $"Error: Meet {o.Meet} not found."
-    | None, None ->     failwith $"Error: Meet {o.Meet} and roster {o.Team} not found."
-
-
-// ------------------ LaTeX Formatting Helpers --------------------
+// --------------------------------------- LaTeX Formatting Helpers ------------------------------------
 
 /// Sorts athlete events in the following priority:
 /// 1. Current athlete events that are numeric, sorted ascending
@@ -248,7 +171,7 @@ let suffix place =
     | 3 -> "rd"
     | _ -> "th"
 
-// ----------------------- LaTeX Formatting for RosterShow --------------------------
+// ------------------------------------ LaTeX Formatting for RosterShow ----------------------------------
 
 /// Sets up the packages for the LaTeX document header and begins the document
 let latexHeaderRoster = 
@@ -273,7 +196,6 @@ let formatTime = function
     | Float f -> sprintf "%.2f" f
     | MinuteTime (m, s) -> sprintf "%.0f:%.2f" m s
 
-
 /// Formats the entire athlete cell, including all events and PRs if available, and returns a tuple of each cell
 let formatAthleteCells (a: AthleteDeclaration) : string * string * string =
     let events = String.concat ", " a.Events
@@ -283,6 +205,19 @@ let formatAthleteCells (a: AthleteDeclaration) : string * string * string =
         |> String.concat ", "
     a.Name, events, prs
 
+/// Formats a single event row (with italics if only a PR exists)
+let formatEventRow (a: AthleteDeclaration) (event: string) : string * string =
+    let displayEvent =
+        if List.contains event a.Events then event
+        else $"\\textit{{{event}}}"
+
+    let pr =
+        match List.tryFind (fun pr -> pr.Event = event) a.PRs with
+        | Some pr -> formatTime pr.Time
+        | None -> ""
+
+    displayEvent, pr
+
 /// Creates all the rows for the athlete, with each one having an event
 let renderAthleteRows (state: EvalState) (name: Identifier) : string list =
     match Map.tryFind name state.Athletes with
@@ -290,43 +225,32 @@ let renderAthleteRows (state: EvalState) (name: Identifier) : string list =
     | Some a ->
         let prEvents = a.PRs |> List.map (fun pr -> pr.Event)
         let combinedEvents = allEvents a prEvents
-        let rows =
-            combinedEvents 
-            |> List.map 
-                (fun event ->
-                    // Shows how to distinguish between current events and events that were only given a PR
-                    let displayEvent =
-                        if List.contains event a.Events then event
-                        else sprintf "\\textit{%s}" event 
+        let rows = combinedEvents |> List.map (formatEventRow a)
 
-                    // The PR for the event
-                    let pr = 
-                        match List.tryFind (fun pr -> pr.Event = event) a.PRs with
-                        | Some pr -> formatTime pr.Time
-                        | None -> ""
-
-                    displayEvent, pr
-                )
-        
-        // Returns a list of all the row strings in good LaTeX formatting
         match rows with
-        | [] -> [ $"{a.Name} & & \\\\" ] 
-        | (ev, pr) ::rest ->
-            let firstRow = $"{a.Name} & {ev} & {pr} \\\\" // appends the name of the first athlete only in the first row
+        | [] -> [ $"{a.Name} & & \\\\" ]
+        | (ev, pr) :: rest ->
+            let firstRow = $"{a.Name} & {ev} & {pr} \\\\"
             let restRows = rest |> List.map (fun (e, pr) -> $"& {e} & {pr} \\\\")
             firstRow :: restRows @ [ "\\midrule" ]
 
 // Builds the entire table for the roster
 let buildRosterTable (state: EvalState) (athletes: Set<Identifier>) : string =
-    let header = "\\toprule\n\\textbf{Name} & \\textbf{Event} & \\textbf{PR} \\\\\n\\midrule"
+    let headerLines = [
+        "\\rowcolors{2}{gray!10}{white}"
+        "\\begin{tabularx}{\\textwidth}{lXr}"
+        "\\toprule"
+        "\\textbf{Name} & \\textbf{Event} & \\textbf{PR} \\\\"
+    ]
+
     let rows = athletes |> Set.toList |> List.map (renderAthleteRows state) |> List.concat
 
-    let rowsFormatted =
-        [ "\\rowcolors{2}{gray!10}{white}"; "\\begin{tabularx}{\\textwidth}{lXr}" ; header ]
-        |> List.append rows
-        |> List.append [ "\\bottomrule"; "\\end{tabularx}" ]
-        |> String.concat "\n"
-    rowsFormatted
+    let tableBody =
+        match rows with
+        | [] -> []
+        | _ -> ("\\midrule" :: rows) @ ["\\bottomrule"]
+
+    String.concat "\n" (headerLines @ tableBody @ [ "\\end{tabularx}" ])
 
 /// Constructs the entire latex document for roster output
 let buildRosterLatexDocument (state: EvalState) (roster: string) (athletes: Set<Identifier>): string =
@@ -345,7 +269,6 @@ let generateLatexRosterShow (state: EvalState) (roster: Identifier) : string opt
     | Some athletes ->
         let tex = buildRosterLatexDocument state roster athletes
         Some (runPdfLatex tex "." (roster + "_roster"))
-
 
 // ----------------------- LaTeX Formatting for MeetShow --------------------------
 
@@ -444,6 +367,164 @@ let generateLatexMeetShow (state: EvalState) (meetId: Identifier) : string optio
         Some (runPdfLatex tex "." (meetId + "_meet"))
 
 
+// ----------------------- Optimizer --------------------------
+
+// Expands the roster's athletes personal records into a list
+let expandPRs (assignment: Assignment) (state: EvalState) : (Identifier * Identifier * Time) list =
+    assignment
+    |> List.choose (fun (athlete, event) ->
+        match Map.tryFind athlete state.Athletes with
+        | Some a ->
+            match List.tryFind (fun pr -> pr.Event = event) a.PRs with 
+            | Some pr -> Some (athlete, event, pr.Time)
+            | None -> None
+        | None -> None
+    )
+
+// Gets a list of all of the opponents' personal records
+let getOpponentPRs opponents=
+    opponents |> List.collect (fun a -> a.PRs |> List.map (fun pr -> (a.Name, pr.Event, pr.Time)))
+
+// Converts times into seconds for scoring purposes
+let scoreTime = function
+    | Float f -> f
+    | MinuteTime (m, s) -> m * 60.0 + s
+
+let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) : int =
+    entries
+    |> List.sortBy (fun (_, _, t) -> scoreTime t)
+    |> List.mapi (fun i (athlete, _, _) ->
+        if i < List.length meet.Scoring then
+            let pts = meet.Scoring.[i].Score
+            if Set.contains athlete yourRoster then pts else 0
+        else 0
+    )
+    |> List.sum
+
+let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) (opponents: AthleteDeclaration list) : int =
+    let allEntries =
+        let yourEntries = expandPRs assignment state
+        let opponentEntries = getOpponentPRs opponents
+        yourEntries @ opponentEntries
+
+    allEntries
+    |> List.groupBy (fun (_, event, _) -> event)
+    |> List.sumBy (fun (_, entries) -> scoreEvent entries meet yourRoster)
+
+// Gets a list of all opposing athletes
+let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: EvalState) : AthleteDeclaration list =
+    meet.Teams
+    |> List.filter ((<>) yourTeam)
+    |> List.collect (fun rosterName ->
+        state.Rosters |> Map.tryFind rosterName |> function
+        | Some roster -> roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
+        | None -> []
+    )
+
+// Generates all possible assignments for athlete, event combinations
+let generateAssignments (athletes: AthleteDeclaration list) (events: Identifier list) : Assignment list =
+    let possibleEntries =
+        athletes
+        |> List.collect (fun a ->
+            a.Events |> List.filter (fun e -> List.contains e events) |> List.map (fun e -> (a.Name, e)))
+    let powerset xs =
+        let folder acc x = List.fold (fun acc' subset -> (x :: subset) :: acc') acc acc
+        List.fold folder [ [] ] xs
+    powerset possibleEntries
+
+// Computes the optimal athlete to event assignments. 
+// Assumptions: 
+//      1. All opposing athletes run every event that they have a PR in
+//      2. Our athletes can run as many events as they want, as long as they satisfy meet requirements
+//      3. Athletes always run their PRs
+let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Identifier>) (team: Identifier) =
+    let athletes = roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
+    let opponents = getOpposingAthletes meet team state
+    let assignments = 
+        let allPossibleAssignments = generateAssignments athletes meet.Events
+        match meet.MaxAthletesPerEvent with
+        | Some max -> allPossibleAssignments |> List.filter (fun assignment ->
+                assignment |> List.countBy fst |> List.forall (fun (_, count) -> count <= max)
+            )
+        | None -> allPossibleAssignments
+    let bestAssignment, bestScore =
+        assignments
+        |> List.map (fun a -> a, scoreAssignment a state meet roster opponents)
+        |> List.maxBy snd
+    state, {meet = meet; team = team; assignment = bestAssignment; bestScore = bestScore}
+
+// ----------------------- LaTeX Formatting for Optimizer --------------------------
+
+/// Optimization document header
+let optimizationDocHeader meet =
+    let eventStringList = String.concat ", " meet.Events
+    let scoringStringList =
+        meet.Scoring
+        |> List.map (fun s -> $"{s.Place}{suffix s.Place}: {s.Score}")
+        |> String.concat ", "
+    [
+        $"\\section*{{Optimization for Meet: {meet.Name}}}"
+        $"Events: {eventStringList}\\\\"
+        $"Scoring: {scoringStringList}\\\\"
+    ]
+
+let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
+    let yourAssignments =
+        opt.assignment
+        |> List.filter (fun (_, e) -> e = event)
+
+    let yourRoster = 
+        match Map.tryFind opt.team state.Rosters with
+        | Some r -> r
+        | None -> Set.empty
+
+    let opponentEntries = getOpponentPRs (getOpposingAthletes opt.meet opt.team state)
+    let yourEntries = expandPRs opt.assignment state |> List.filter (fun (_, e, _) -> e = event)
+    let allEntries = yourEntries @ (opponentEntries |> List.filter (fun (_, e, _) -> e = event))
+
+    let sorted = allEntries |> List.sortBy (fun (_, _, t) -> scoreTime t)
+
+    let rows =
+        sorted
+        |> List.mapi (fun i (athlete, _, time) ->
+            let place = $"{i + 1}{suffix (i + 1)}"
+            let name =
+                if Set.contains athlete yourRoster then $"\\textbf{{{athlete}}}" else athlete
+            $"{place} & {name} & {formatTime time} \\\\"
+        )
+
+    String.concat "\n" (
+        [ $"\\subsection*{{Event: {event}}}"
+          "\\begin{tabularx}{\\linewidth}{lXr}"
+          "\\toprule"
+          "Place & Athlete & Time \\\\"
+          "\\midrule" ]
+        @ rows @
+        [ "\\bottomrule"
+          "\\end{tabularx}" ]
+    )
+
+
+/// Constructs the full LaTeX document string for a meet
+let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimization) : string =
+    let header = latexHeaderMeet
+    let docHeader = optimizationDocHeader optimization.meet
+    let teams = teamList optimization.meet
+    let eventTables = optimization.meet.Events |> List.map (optimizedEventTable state optimization)
+    
+    String.concat "\n\n" (
+        [header]
+        @ docHeader
+        @ [teams]
+        @ eventTables
+        @ ["\\end{document}"]
+    )
+
+/// Generates the meet LaTeX file using the current state and a meet ID
+let generateLatexOptimization (state: EvalState) (optimization: Optimization) : string option =
+    let tex = buildOptimizationLatexDocument state optimization
+    Some (runPdfLatex tex "." (optimization.meet.Name + "_meet_optimization"))
+        
 
 // --------------------  Evaluation Helpers ----------------------
 
@@ -465,6 +546,19 @@ let meetShow state ms=
         state, Some path
     | None -> MNF ms.MeetToShowName
 
+// Runs the optimization statment
+let optimize (state: EvalState) (o: Optimize) =
+    match Map.tryFind o.Meet state.Meets, Map.tryFind o.Team state.Rosters with
+    | Some meet, Some roster -> 
+            let state, optimization = runOptimization state meet roster o.Team
+            match generateLatexOptimization state optimization with 
+            | Some path -> state, Some path
+            | None -> failwith "Error: Optimization failed."
+    | Some _, None ->   RNF o.Team
+    | None, Some _ ->   MNF o.Meet
+    | None, None ->     failwith $"Error: Meet {o.Meet} and roster {o.Team} not found."
+
+
 // ----------------------  Evaluation ----------------------
 
 let eval (prog: Program) =
@@ -481,6 +575,7 @@ let eval (prog: Program) =
             | MeetShow ms ->           meetShow state ms
             | Meet m ->           declareMeet state m, lastPdf
             | MeetAdd ma ->               addToMeet state ma, lastPdf
-            | Optimize o ->              optimize state o, lastPdf
+            | MeetRemoval mr ->       removeFromMeet state mr, lastPdf
+            | Optimize o ->              optimize state o
         ) (emptyState, None) prog
     0

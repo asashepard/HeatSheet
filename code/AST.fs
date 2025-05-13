@@ -89,5 +89,6 @@ type Statement =
     | Meet of MeetDeclaration
     | Optimize of Optimize
     | MeetAdd of MeetAdd
+    | MeetRemoval of MeetRemoval
 
 type Program = Statement list
