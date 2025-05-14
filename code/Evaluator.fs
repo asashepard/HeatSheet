@@ -216,6 +216,7 @@ let latexHeaderRoster =
 let formatTime = function
     | Float f -> sprintf "%.2f" f
     | MinuteTime (m, s) -> sprintf "%.0f:%.2f" m s
+    | HourMinuteTime (h, m, s) -> sprintf "%.0f:%.0f:%.2f" h m s
 
 /// Formats the entire athlete cell, including all events and PRs if available, and returns a tuple of each cell
 let formatAthleteCells (a: AthleteDeclaration) : string * string * string =
@@ -345,6 +346,7 @@ let eventTable (state: EvalState) (meet: MeetDeclaration) (event: string) : stri
             match time with
             | Float f -> f
             | MinuteTime (m, s) -> m * 60.0 + s
+            | HourMinuteTime(h,m,s) -> h * 60.0 * 60.0 + m * 60.0 + s
         )
 
     let rows =
@@ -411,7 +413,7 @@ let getOpponentPRs opponents=
 let scoreTime = function
     | Float f -> f
     | MinuteTime (m, s) -> m * 60.0 + s
-
+    | HourMinuteTime(h,m,s) -> h * 60.0 * 60.0 + m * 60.0 + s
 
 let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) : int =
     entries

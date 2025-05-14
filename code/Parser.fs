@@ -57,14 +57,21 @@ let pfloat: Parser<float> =
         (fun (i, d) -> float (i + "." + d))
 
 /// Parses seconds
-let pseconds: Parser<Time> =
-    pfloat |>> Float <|> (pint |>> Float)
+let pseconds = pfloat |>> Float <|> (pint |>> Float)
 
 /// Parses a complete minute time e.g. 1:54.00
-let minutetime: Parser<Time> = pseq pint (pright pcolon (pfloat <|> pint)) MinuteTime
+let minutetime = pseq pint (pright pcolon (pfloat <|> pint)) MinuteTime
+
+/// Parses a complete hour time e.g. 1:53:24.00
+let hourMinuteTime =
+    pseq pint (pright pcolon minutetime) (fun (h, t) ->
+        match t with
+        | MinuteTime (m, s) -> HourMinuteTime(h, int m, s)
+        | _ -> failwith "Unreachable: minutetime only returns MinuteTime"
+    )
 
 /// Complete parser for all valid time inputs
-let time: Parser<Time> = minutetime <|> pseconds <!> "ptime"
+let time = hourMinuteTime <|> minutetime <|> pseconds <!> "ptime"
 
 /// Parses a PR entry in the form of "100m : 11.01"
 let prentry: Parser<PR> =

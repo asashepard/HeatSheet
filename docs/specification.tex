@@ -157,114 +157,103 @@ Coaches can impose constraints to model the realities of competition, such as li
 HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets.
 
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
-  program                 ::= <statement>;+
+  <program>             ::= <statement> ;+
 
-  statement               ::= <roster-declaration>
-                            | <athlete-declaration>
-                            | <athlete-update>
-                            | <athlete-duplicate>
-                            | <set-PR>
-                            | <meet-declaration>
-                            | <meet-add>
-                            | <meet-remove>
-                            | <roster-add>
-                            | <roster-removal>
-                            | <output>
-                            | <optimize>
-
-  <roster-declaration>    ::= let roster <Identifier>
-                            | let roster <Identifier>, 
-                              athletes: <athlete-list>
-
-  <athlete-declaration>   ::= let athlete <Identifier>,
-                              events: <event-list>,
-                              PRs: <pr-list>
-                            | let athlete <Identifier>,
-                              events: <event-list>,
-                              PRs: <pr-list>,
-                              maxEvents: <pr-list>
-
-  <athlete-update>        ::= update athlete <Identifier>,
-                              events: <event-list>
-                            | update athlete <Identifier>,
-                              events: <event-list>,
-                              PRs: <pr-list>
-
-  <duplicate>             ::= <athlete-duplicate>
-                            | <roster-duplicate>
-                            | <meet-duplicate>
-
-  <athlete-duplicate>     ::= duplicate <athlete> to <Identifier>
-
-  <roster-duplicate>      ::= duplicate <roster> to <Identifier>
-
-  <meet-duplicate>        ::= duplicate <meet> to <Identifier>
+  <statement>           ::= <roster-declaration>
+                          | <athlete-declaration>
+                          | <athlete-update>
+                          | <set-pr>
+                          | <meet-declaration>
+                          | <meet-add>
+                          | <meet-remove>
+                          | <roster-add>
+                          | <roster-removal>
+                          | <output>
+                          | <optimize>
+                          | <duplicate>
   
-  <set-PR>                ::= set <athlete> to <time> in <event>
-
-  <meet-declaration>      ::= let meet <Identifier>,
-                              events: <event-list>,
-                              scoring: <scoring-list>
-                            | let meet <Identifier>,
-                              events: <event-list>,
-                              scoring: <scoring-list>,
-                              teams: <roster-list>
-
-  <meet-add>              ::= include <roster> in <meet>
-
-  <meet-remove>           ::= exclude <roster> from <meet>
-
-  <roster-add>            ::= add <athlete> to <roster>
-
-  <roster-removal>        ::= remove <athlete> from <roster>
-
-  <output>                ::= output <roster>
-                            | output <meet>
-                            | output <roster> to <path>
-                            | output <meet> to <path>
+  <roster-declaration>  ::= let roster <identifier>
+                          | let roster <identifier>,
+                            athletes: <athlete-list>
   
-  <path>                  ::= <path> ::= (<Letter> | <Digit> | "." | "/" | "_" | "-")+
+  <athlete-declaration> ::= let athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>
+                          | let athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>,
+                            maxevents: <int>
+  
+  <athlete-update>      ::= update athlete <identifier>,
+                            events: <event-list>
+                          | update athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>
+                          | update athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>,
+                            maxevents: <int>
+  
+  <set-pr>              ::= set <athlete> to <time> in <event>
+  
+  <meet-declaration>    ::= let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>
+                          | let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>,
+                            teams: <roster-list>
+                          | let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>,
+                            teams: <roster-list>,
+                            maxeventsperathlete: <int>
+  
+  <meet-add>            ::= include <roster> in <meet>
+  
+  <meet-remove>         ::= exclude <roster> from <meet>
+  
+  <roster-add>          ::= add <athlete> to <roster>
+  
+  <roster-removal>      ::= remove <athlete> from <roster>
+  
+  <output>              ::= output <roster>
+                          | output <meet>
+                          | output <roster> to <path>
+                          | output <meet> to <path>
+  
+  <optimize>            ::= optimize <roster> for <meet>
+  
+  <duplicate>           ::= duplicate <athlete> to <identifier>
+                          | duplicate <roster> to <identifier>
+                          | duplicate <meet> to <identifier>
+  
+  <athlete-list>        ::= <athlete> , <athlete>*
+  <roster-list>         ::= <roster> , <roster>*
+  <event-list>          ::= <event> , <event>*
+  <pr-list>             ::= <pr> , <pr>*
+  <scoring-list>        ::= <score-entry> , <score-entry>*
+  
+  <pr>                  ::= <event> : <time>
+  <score-entry>         ::= <place> : <int>
+  <place>               ::= <int> <suffix>
+  <time>                ::= <float>
+                          | <int> : <float>
+                          | <int> : <int> : <float>
+  
+  <path>                ::= (<letter> | <digit> | "." | "/" | "_" | "-")+
 
-  <optimize>              ::= optimize <roster> for <meet>
+  <event>               ::= <identifier>
+  <athlete>             ::= <identifier>
+  <roster>              ::= <identifier>
+  <meet>                ::= <identifier>
 
-  <athlete>               ::= <Identifier>
-
-  <roster>                ::= <Identifier>
-
-  <meet>                  ::= <Identifier>
-
-  <athlete-list>          ::= <athlete> , <athlete>*
-
-  <roster-list>           ::= <roster> , <roster>*
-
-  <event-list>            ::= <event> , <event>*
-
-  <event>                 ::= <Identifier>
-
-  <pr-list>               ::= <pr> , <pr>*
-
-  <pr>                    ::= <event> : <time>
-
-  <scoring-list>          ::= <score-entry> , <score-entry>*
-
-  <score-entry>           ::= <place> : <int>
-
-  <place>                 ::= <int> <suffix>
-
-  <suffix>                ::= st | nd | rd | th
-
-  <time>                  ::= <float>
-                           | <int> : <float>
-
-  <float>                 ::= <int> . <int>
-
-  <int>                   ::= <digit>+
-
-  <digit>                 ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-
-  <Identifier>            ::= (<Letter> | <Digit>)*
-
-  <Letter>                ::= a-z | A-Z
+  <identifier>          ::= (<letter> | <digit>)*
+  <float>               ::= <int> . <int>
+  <int>                 ::= <digit>+
+  <digit>               ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+  <letter>              ::= a-z | A-Z
+  <suffix>              ::= st | nd | rd | th
     
 \end{lstlisting}
 

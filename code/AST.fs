@@ -7,6 +7,7 @@ type Identifier = string
 type Time = 
 | Float of float
 | MinuteTime of float * float
+| HourMinuteTime of float * float * float
 
 type ScoreEntry = { Place: int; Score: int }
 
