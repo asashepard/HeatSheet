@@ -12,7 +12,7 @@ let athlete WilliamMurray,
 
 let athlete YanniKakouris,
     events: 100m, 200m,
-    prs: 100m: 11.09, 200m: 20.07;
+    prs: 100m: 11.09, 200m: 22.07;
 
 let athlete BradyStahelski,
     events: 100m, 400m,

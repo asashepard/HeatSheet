@@ -559,29 +559,6 @@ let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDecla
     )
     |> List.sum
 
-let scoreEventStochastic
-        (entries     : (Identifier * Identifier * Time) list)
-        (meet        : MeetDeclaration)
-        (yourRoster  : Set<Identifier>) : int =
-
-    // convert every athlete’s PR to a simulated mark
-    let sampled =
-        entries
-        |> List.map (fun (name, event, t) ->
-            let seconds = scoreTime t
-            let simMark = sampleTime event seconds
-            (name, event, simMark))
-
-    // rank lower time = better place
-    sampled
-    |> List.sortBy (fun (_,_,sec) -> sec)
-    |> List.mapi (fun i (ath,_,_) ->
-        if i < List.length meet.Scoring then
-            let pts = meet.Scoring.[i].Score
-            if Set.contains ath yourRoster then pts else 0
-        else 0)
-    |> List.sum
-
 let simulateMeetOnce
         (yourTeam       : Identifier)
         (yourAssignment : Assignment)
@@ -595,6 +572,54 @@ let simulateMeetOnce
     let opponentEntries  = getOpponentPRs state meet opponents
     let allEntries       = yourEntries @ opponentEntries      // (ath, event, PR)
     let groupedByEvent   = allEntries |> List.groupBy (fun (_,e,_) -> e)
+
+    let relayEvents = ["4x100m"; "4x400m"]
+    let relayResults =
+        relayEvents
+        |> List.filter (fun ev -> List.contains ev meet.Events)
+        |> List.map (fun relay ->
+            // Determine relay base event and exchange time
+            let (baseEvent, exchangePenalty) =
+                if relay = "4x100m" then "100m", 0.25 * 3.0 else "400m", 1.0 * 3.0
+
+            // Build team → best relay time map
+            let teamTimes =
+                meet.Teams
+                |> List.choose (fun team ->
+                    let athletes =
+                        match Map.tryFind team state.Rosters with
+                        | Some r -> r |> Set.toList |> List.choose (fun n -> Map.tryFind n state.Athletes)
+                        | None -> []
+
+                    let splits =
+                        athletes
+                        |> List.choose (fun a ->
+                            PRPredictor.estimatePR a baseEvent
+                            |> Option.map (fun t -> a.Name, sampleTime baseEvent t)
+                        )
+
+                    let rec choose4 lst =
+                        match lst with
+                        | a::b::c::d::_ -> [[a; b; c; d]]
+                        | _ -> 
+                            let rec choose n xs = 
+                                match n, xs with
+                                | 0, _ -> [ [] ]
+                                | _, [] -> []
+                                | k, y::ys -> (choose (k - 1) ys |> List.map (fun tail -> y :: tail)) @ (choose k ys)
+                            choose 4 lst
+
+                    let best =
+                        splits
+                        |> choose4
+                        |> List.map (fun q -> team, q, (List.sumBy snd q + exchangePenalty))
+                        |> List.sortBy (fun (_,_,t) -> t)
+                        |> List.tryHead
+                    best
+                )
+
+            (relay, teamTimes)
+        )
 
     // dictionary team → points
     let totals = Dictionary<Identifier,int>()
@@ -623,13 +648,23 @@ let simulateMeetOnce
                 let pts = meet.Scoring.[place].Score
                 // which team is this athlete on?
                 let team =
-                    if Set.contains ath yourRoster then yourTeam  // you may store it
-                    else                                           // look up in roster map
+                    if Set.contains ath yourRoster then yourTeam
+                    else
                         state.Rosters
                         |> Seq.pick (fun kv ->
                             let (teamName, members) = kv.Key, kv.Value
                             if members.Contains ath then Some teamName else None)
                 addPts team pts)
+        |> ignore
+
+    for (relayName, teams) in relayResults do
+        teams
+        |> List.sortBy (fun (_, _, time) -> time)
+        |> List.mapi (fun i (team, _, _) ->
+            if i < List.length meet.Scoring then
+                let pts = meet.Scoring.[i].Score
+                addPts team pts
+        )
         |> ignore
 
     // convert to immutable Map
@@ -772,21 +807,58 @@ let generateGreedyAssignment
     (maxAthletesPerEvent  : int option)
     : Assignment list =
 
-    // 1) build all (athlete,event,time) triples
-    let scoreSecs = function
-      | Float f                 -> f
-      | MinuteTime (m,s)        -> m*60.0 + s
-      | HourMinuteTime(h,m,s)   -> float h*3600.0 + float m*60.0 + s
+    let rec comb k xs =
+        match k, xs with
+        | 0, _          -> [ [] ]
+        | _, []         -> []
+        | k, y :: ys    ->
+            (comb (k-1) ys |> List.map (fun zs -> y::zs))
+            @ comb k ys
 
+    // 1) build all (athlete,event,time) triples and relay cases
     let allPairs =
-        athletes
-        |> List.collect (fun a ->
-            events
-            |> List.choose (fun ev ->
-                // estimatePR returns seconds directly
-                PRPredictor.estimatePR a ev
-                |> Option.map (fun secs -> (a.Name, ev, secs))
-            )
+        events
+        |> List.collect (fun ev ->
+            match ev with
+            // ─── relay cases ───
+            | "4x100m" ->
+                // penalty: 0.25s × 3 exchanges
+                let penalty = 0.25 * 3.0
+                // gather (name,split) for anyone who has or can predict a 100m
+                let splits =
+                    athletes
+                    |> List.choose (fun a ->
+                        PRPredictor.estimatePR a "100m"
+                        |> Option.map (fun t -> a.Name, t))
+                // all quartets of 4
+                comb 4 splits
+                |> List.collect (fun quartet ->
+                    let time = List.sumBy snd quartet + penalty
+                    // emit one triple per runner
+                    quartet |> List.map (fun (nm,_) -> (nm, ev, time))
+                )
+
+            | "4x400m" ->
+                // penalty: 1.0s × 3 exchanges
+                let penalty = 1.0 * 3.0
+                let splits =
+                    athletes
+                    |> List.choose (fun a ->
+                        PRPredictor.estimatePR a "400m"
+                        |> Option.map (fun t -> a.Name, t))
+                comb 4 splits
+                |> List.collect (fun quartet ->
+                    let time = List.sumBy snd quartet + penalty
+                    quartet |> List.map (fun (nm,_) -> (nm, ev, time))
+                )
+
+            // ─── individual events ───
+            | _ ->
+                athletes
+                |> List.choose (fun a ->
+                    PRPredictor.estimatePR a ev
+                    |> Option.map (fun t -> (a.Name, ev, t))
+                )
         )
 
     let sorted =
@@ -974,39 +1046,101 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
         | Some r -> r
         | None -> Set.empty
 
-    let opponentEntries = getOpponentPRs state opt.meet (getOpposingAthletes opt.meet opt.team state)
-    let yourEntries = expandPRs opt.assignment state |> List.filter (fun (_, e, _) -> e = event)
-    let allEntries = yourEntries @ (opponentEntries |> List.filter (fun (_, e, _) -> e = event))
+    if event = "4x100m" || event = "4x400m" then
+        let splitEvent, exchangeBonus =
+            if event = "4x100m" then "100m", 0.25 * 3.0 else "400m", 0.7 * 3.0
 
-    let sorted = allEntries |> List.sortBy (fun (_, _, t) -> scoreTime t)
+        let bestRelay (team: Identifier) =
+            let athletes =
+                state.Rosters.[team]
+                |> Seq.choose (fun nm -> Map.tryFind nm state.Athletes)
+                |> Seq.toList
 
-    let rows =
-        sorted
-        |> List.mapi (fun i (athlete, _, time) ->
-            let place = $"{i + 1}{suffix (i + 1)}"
-            let name =
-                if Set.contains athlete yourRoster then $"\\textbf{{{athlete}}}" else athlete
-            let team =
-                if Set.contains athlete yourRoster then opt.team
-                else
-                    state.Rosters
-                    |> Map.toSeq
-                    |> Seq.tryFind (fun (teamName, members) -> members.Contains athlete)
-                    |> Option.map fst
-                    |> Option.defaultValue "Unknown"
-            $"{place} & {name} ({team}) & {formatTime time} \\\\"
+            let splits =
+                athletes
+                |> List.choose (fun a ->
+                    PRPredictor.estimatePR a splitEvent
+                    |> Option.map (fun t -> a.Name, t))
+
+            let quartets =
+                let rec choose k lst =
+                    match k, lst with
+                    | 0, _      -> [ [] ]
+                    | _, []     -> []
+                    | n, y::ys  ->
+                        (choose (n - 1) ys |> List.map (fun zs -> y :: zs))
+                        @ choose n ys
+                choose 4 splits
+
+            quartets
+            |> List.minBy (fun q -> List.sumBy snd q - exchangeBonus)
+            |> fun q -> q, List.sumBy snd q - exchangeBonus
+
+        let teamRows =
+            opt.meet.Teams
+            |> List.map (fun team ->
+                let quartet, total = bestRelay team
+                let names = quartet |> List.map fst |> String.concat ", "
+                let predicted =
+                    quartet
+                    |> List.exists (fun (nm, _) ->
+                        let a = Map.find nm state.Athletes
+                        not (a.PRs |> List.exists (fun pr -> pr.Event = splitEvent)))
+                team, names, total, predicted
+            )
+            |> List.sortBy (fun (_, _, t, _) -> t)
+            |> List.mapi (fun i (team, names, total, predicted) ->
+                let place = $"{i + 1}{suffix (i + 1)}"
+                let name = if team = opt.team then $"\\textbf{{{team}}}" else team
+                let timeStr = sprintf "%.2f%s" total ""
+                $"{place} & {name} ({names}) & {timeStr} \\\\"
+            )
+
+        String.concat "\n" (
+            [ $"\\subsection*{{Event: {event}}}"
+              "\\begin{tabularx}{\\linewidth}{lXr}"
+              "\\toprule"
+              "Place & Team (Relay Members) & Time \\\\"
+              "\\midrule" ]
+            @ teamRows @
+            [ "\\bottomrule"
+              "\\end{tabularx}" ]
         )
 
-    String.concat "\n" (
-        [ $"\\subsection*{{Event: {event}}}"
-          "\\begin{tabularx}{\\linewidth}{lXr}"
-          "\\toprule"
-          "Place & Athlete & Time \\\\"
-          "\\midrule" ]
-        @ rows @
-        [ "\\bottomrule"
-          "\\end{tabularx}" ]
-    )
+    else
+        let opponentEntries = getOpponentPRs state opt.meet (getOpposingAthletes opt.meet opt.team state)
+        let yourEntries = expandPRs opt.assignment state |> List.filter (fun (_, e, _) -> e = event)
+        let allEntries = yourEntries @ (opponentEntries |> List.filter (fun (_, e, _) -> e = event))
+
+        let sorted = allEntries |> List.sortBy (fun (_, _, t) -> scoreTime t)
+
+        let rows =
+            sorted
+            |> List.mapi (fun i (athlete, _, time) ->
+                let place = $"{i + 1}{suffix (i + 1)}"
+                let name =
+                    if Set.contains athlete yourRoster then $"\\textbf{{{athlete}}}" else athlete
+                let team =
+                    if Set.contains athlete yourRoster then opt.team
+                    else
+                        state.Rosters
+                        |> Map.toSeq
+                        |> Seq.tryFind (fun (_, members) -> members.Contains athlete)
+                        |> Option.map fst
+                        |> Option.defaultValue "Unknown"
+                $"{place} & {name} ({team}) & {formatTime time} \\\\"
+            )
+
+        String.concat "\n" (
+            [ $"\\subsection*{{Event: {event}}}"
+              "\\begin{tabularx}{\\linewidth}{lXr}"
+              "\\toprule"
+              "Place & Athlete & Time \\\\"
+              "\\midrule" ]
+            @ rows @
+            [ "\\bottomrule"
+              "\\end{tabularx}" ]
+        )
 
 /// Constructs the full LaTeX document string for a meet
 let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimization) : string =
