@@ -802,7 +802,7 @@ let hillClimbOptim
 let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Identifier>) (team: Identifier) =
     let athletes = roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
     let opponents = getOpposingAthletes meet team state
-    let trials    = 500
+    let trials    = 20000
     let hillIters = 2000
 
     // 2a) get the ONE greedy assignment
@@ -898,7 +898,7 @@ let optimizationDocHeader meet o =
         |> List.map (fun (team,mu) ->
             sprintf "\\quad %s: %.1f\\\\" team mu)
 
-    [ sprintf "\\section*{Optimization for Meet: %s}"                meet.Name
+    [ sprintf "\\section*{%s Optimization for Meet: %s}"             o.team meet.Name
       sprintf "\\textbf{Events}: %s\\\\"                             eventString
       sprintf "\\noindent\\textbf{Scoring}: %s\\\\"                  scoringString
       sprintf "\\noindent\\textbf{Placement Probabilities for %s}: %s\\\\" o.team placementString
@@ -907,10 +907,6 @@ let optimizationDocHeader meet o =
 
 /// Builds the event table for each of the optimized events
 let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
-    let yourAssignments =
-        opt.assignment
-        |> List.filter (fun (_, e) -> e = event)
-
     let yourRoster = 
         match Map.tryFind opt.team state.Rosters with
         | Some r -> r
@@ -928,7 +924,15 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
             let place = $"{i + 1}{suffix (i + 1)}"
             let name =
                 if Set.contains athlete yourRoster then $"\\textbf{{{athlete}}}" else athlete
-            $"{place} & {name} & {formatTime time} \\\\"
+            let team =
+                if Set.contains athlete yourRoster then opt.team
+                else
+                    state.Rosters
+                    |> Map.toSeq
+                    |> Seq.tryFind (fun (teamName, members) -> members.Contains athlete)
+                    |> Option.map fst
+                    |> Option.defaultValue "Unknown"
+            $"{place} & {name} ({team}) & {formatTime time} \\\\"
         )
 
     String.concat "\n" (
