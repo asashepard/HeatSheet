@@ -23,6 +23,9 @@ type EvalState = {
 
     // The optimization type.
     OptimizationMethod: OptimizationType
+
+    // All athletes forced to events (map of identifier to a set of events)
+    Forces: Map<Identifier, Set<Identifier>>
 }
 
 type Assignment = (Identifier * Identifier) list
@@ -42,6 +45,7 @@ let emptyState = {
     Rosters = Map.empty
     Meets = Map.empty
     OptimizationMethod = Basic
+    Forces = Map.empty
 }
 
 // -----------------------------  Helpers -----------------------------------------
@@ -166,6 +170,37 @@ let duplicate state d =
             let copied = { meet with Name = dm.NewIdentifier }
             { state with Meets = state.Meets.Add(dm.NewIdentifier, copied) }
         | None -> MNF dm.MeetToDuplicate
+
+let forceAthlete state fa =
+    match Map.tryFind fa.AthleteName state.Athletes with
+        | Some a -> 
+            match Map.tryFind fa.AthleteName state.Forces with
+            | Some forces ->
+                if Set.contains fa.EventToForce forces then 
+                    printfn ($"Warning: Athlete {fa.AthleteName} already forced in {fa.EventToForce}.")
+                    state
+                else { state with Forces = state.Forces.Add(fa.AthleteName, Set.add fa.EventToForce forces) }
+            | None -> { state with Forces = state.Forces.Add(fa.AthleteName, Set.singleton fa.EventToForce)}
+        | None -> ANF fa.AthleteName
+
+let freeAthlete state fr =
+    match Map.tryFind fr.AthleteToFree state.Athletes with
+        | Some a -> 
+            match Map.tryFind fr.AthleteToFree state.Forces with
+            | Some forces ->
+                if Set.contains fr.EventToFree forces then
+                    let updatedForces = Set.remove fr.EventToFree forces
+                    let newForcesMap =
+                        if Set.isEmpty updatedForces then Map.remove fr.AthleteToFree state.Forces
+                        else Map.add fr.AthleteToFree updatedForces state.Forces
+                    { state with Forces = newForcesMap }
+                else 
+                    printfn ($"Warning: Athlete %s{fr.AthleteToFree} already freed from %s{fr.EventToFree}.")
+                    state
+            | None -> 
+                printfn ($"Warning: Athlete {fr.AthleteToFree} already freed from {fr.EventToFree}.")
+                state
+        | None -> ANF fr.AthleteToFree
 
 
 // --------------------------------------- LaTeX Formatting Helpers ------------------------------------
@@ -870,27 +905,29 @@ let generateGreedyAssignment
     let assignment   = ResizeArray<Identifier * Identifier>()
 
     // 3) loop inside the function
-    for (ath,ev,_) in sorted do
-        // read “previous” counts via TryGetValue
+    for (ath, ev, _) in sorted do
+        // read previous counts via TryGetValue
         let mutable prevAth = 0
         ignore (athleteCount.TryGetValue(ath, &prevAth))
         let mutable prevEv  = 0
-        ignore (eventCount.   TryGetValue(ev,  &prevEv))
+        ignore (eventCount.TryGetValue(ev,  &prevEv))
 
-        // what max this athlete can do?
         let athMax =
-          defaultArg
-            ((Map.find ath state.Athletes).MaxEvents)
-            2
+            defaultArg (Map.find ath state.Athletes).MaxEvents 2
 
-        // what max this event can take?
         let evMax =
-          defaultArg maxAthletesPerEvent 100
+            defaultArg maxAthletesPerEvent 100
 
-        if prevAth < athMax && prevEv < evMax then
+        // check if this assignment respects the Forces map
+        let isForced =
+            match Map.tryFind ath state.Forces with
+            | Some forcedEvents -> Set.contains ev forcedEvents
+            | None -> true
+
+        if prevAth < athMax && prevEv < evMax && isForced then
             assignment.Add (ath, ev)
             athleteCount.[ath] <- prevAth + 1
-            eventCount.   [ev]  <- prevEv  + 1
+            eventCount.[ev]    <- prevEv + 1
 
     // 4) back out to module‐level indent
     [ assignment |> Seq.toList ]
@@ -1211,6 +1248,8 @@ let eval (prog: Program) =
             | MeetShow ms -> fst (meetShow state ms)
             | Optimize o -> fst (optimize state o)
             | SetOptimizationType so -> optimizationType state so
+            | ForceAthleteToEvent fa -> forceAthlete state fa
+            | FreeAthleteFromEvent fr -> freeAthlete state fr
         ) emptyState prog |> ignore
         0
     with

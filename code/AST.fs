@@ -24,6 +24,8 @@ type AthleteDeclaration = {
     MaxEvents: int option
 }
 
+
+
 type AthleteUpdate = {
     UpdateName: Identifier
     NewEvents: Identifier list
@@ -109,6 +111,16 @@ type Optimize = {
     Meet: Identifier
 }
 
+type ForceAthlete = {
+    AthleteName: Identifier
+    EventToForce: Identifier
+}
+
+type FreeAthlete = {
+    AthleteToFree: Identifier
+    EventToFree: Identifier
+}
+
 type Statement =
     | Athlete of AthleteDeclaration
     | AthleteUpdate of AthleteUpdate
@@ -124,5 +136,7 @@ type Statement =
     | MeetRemoval of MeetRemoval
     | Duplicate of Duplicate
     | SetOptimizationType of OptimizationType
+    | ForceAthleteToEvent of ForceAthlete
+    | FreeAthleteFromEvent of FreeAthlete
 
 type Program = Statement list

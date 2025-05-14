@@ -7,8 +7,8 @@ open AST
 /// Identifer Parser
 let reserved = Set.ofList [
   "let"; "roster"; "athlete"; "update"; "events"; "prs"; "scoring"; "teams"; 
-  "maxEventsPerAthlete"; "include"; "exclude"; "add"; "remove"; 
-  "from"; "to"; "in"; "output"; "optimize"; "for"; "set"; "maxEvents"
+  "maxEventsPerAthlete"; "include"; "exclude"; "add"; "remove"; "free";
+  "from"; "to"; "in"; "output"; "optimize"; "for"; "set"; "maxEvents"; "force"
 ]
 /// List of valid suffixes for score entries
 let suffix = Set.ofList [ "st"; "nd"; "rd"; "th" ]
@@ -297,6 +297,24 @@ let setOptimizationType = pseq optimizationTypeHeader optimizationType (
             | _ -> failwith "Unreachable: optimizationType only returns basic or simulation. "
     )
 
+/// Parses athlete to force
+let forceAthlete = pright (pad (pstr "force") ) (pad pidentifier)
+
+/// Parses event to force athlete to
+let forceEvent = pright (pad (pstr "to") ) (pad pidentifier)
+
+/// Parses the complete force statement
+let forceAthleteToEvent = pseq forceAthlete forceEvent (fun(a, e) -> {AthleteName = a; EventToForce = e})
+
+/// Parses athlete to free
+let freeAthlete = pright (pad (pstr "free") ) (pad pidentifier)
+
+/// Parses event to free athlete to
+let freeEvent = pright (pad (pstr "from") ) (pad pidentifier)
+
+/// Parses the complete free statement
+let freeAthleteFromEvent = pseq freeAthlete freeEvent (fun(a, e) -> {AthleteToFree = a; EventToFree = e})
+
 /// All of the possible statements in the language
 let athleteDeclStmt = athleteDecl |>> Athlete <!> "athleteDeclStmt"
 let rosterDeclStmt = rosterDecl  |>> Roster  <!> "rosterDeclStmt"
@@ -309,6 +327,8 @@ let meetDeclStmt = meetDecl |>> Meet <!> "meetDeclStmt"
 let meetRemoveStmt = meetRemoval |>> MeetRemoval <!> "meetRemoveStmt"
 let optimizeStmt = optimize |>> Optimize <!> "optimizeStmt"
 let setOptimizationTypeStmt = setOptimizationType |>> SetOptimizationType <!> "optimizationTypeStmt"
+let forceAthleteToEventStmt = forceAthleteToEvent |>> ForceAthleteToEvent <!> "forceAthleteToEventStmt"
+let freeAthleteFromEventStmt = freeAthleteFromEvent |>> FreeAthleteFromEvent <!> "freeAthleteFromEventStmt"
 let duplicationStmt =
     duplication |>> (fun ((typ, orig), newName) ->
         match typ with
@@ -319,9 +339,9 @@ let duplicationStmt =
     ) <!> "duplicationStmt"
 
 let pstatement =
-    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> 
+    athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> forceAthleteToEventStmt <|>
     meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt <|> setOptimizationTypeStmt <|>
-    athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow <|> duplicationStmt
+    athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow <|> duplicationStmt <|> freeAthleteFromEventStmt
 
 /// Parses a list of statements, requiring semicolons after each
 let programParser =
