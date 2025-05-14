@@ -6,15 +6,13 @@ let athlete PierreLouisSheehan,
 
 let athlete OakSullivan,
     events: 100m, 400m,
-    prs: 100m: 11.01, 400m: 50.83;
-
-let athlete WilliamMurray,
-    events: 100m,
-    prs: 100m: 11.02;
-
+    prs: 100m: 11.01, 400m: 50.83,
+    maxEvents: 1;
+    
 let athlete YanniKakouris,
     events: 100m, 200m,
-    prs: 100m: 11.09, 200m: 22.07;
+    prs: 100m: 11.09, 200m: 22.07,
+    maxEvents: 1;
 
 let athlete BradyStahelski,
     events: 100m, 400m,
@@ -30,7 +28,8 @@ let athlete JosephKouameWaldman,
 
 let athlete JordanDavis,
     events: 100m, 400m,
-    prs: 100m: 12.65, 400m: 61.48;
+    prs: 100m: 12.65, 400m: 61.48,
+    maxEvents: 1;
 
 let athlete OscarNewman,
     events: 200m, 400m,
@@ -64,11 +63,13 @@ let athlete NoahStegmeier,
     events: 400m,
     prs: 400m: 52.16;
 
+force YanniKakouris to 100m;
+force OakSullivan to 400m;
+
 let roster Williams;
 
 add PierreLouisSheehan to Williams;
 add OakSullivan        to Williams;
-add WilliamMurray      to Williams;
 add YanniKakouris      to Williams;
 add BradyStahelski     to Williams;
 add DeveshKhamitkar    to Williams;
