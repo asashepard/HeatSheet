@@ -20,12 +20,15 @@ type EvalState = {
 }
 
 type Assignment = (Identifier * Identifier) list
+type Hist = Dictionary<int,int>
 type Optimization = {
     meet: MeetDeclaration
     team: Identifier
     assignment: Assignment
     expected: float
     placement: Map<int, float>
+    expectedAll: Map<Identifier, float>
+    histograms: Map<Identifier, Hist>
 }
 
 
@@ -324,9 +327,6 @@ let meetDocumentHeader meet =
         $"Scoring: {scoringStringList}\\\\"
     ]
 
-/// gets a string list of teams separated by commas
-let teamList meet = "\\subsection*{Teams}\n" + String.concat ", " meet.Teams
-
 /// Builds the event table with potential athletes and their PRs
 let eventTable (state: EvalState) (meet: MeetDeclaration) (event: string) : string =
     let allAthletes =
@@ -373,13 +373,11 @@ let eventTable (state: EvalState) (meet: MeetDeclaration) (event: string) : stri
 let buildMeetLatexDocument (state: EvalState) (meet: MeetDeclaration) : string =
     let header = latexHeaderMeet
     let docHeader = meetDocumentHeader meet
-    let teams = teamList meet
     let eventTables = meet.Events |> List.map (eventTable state meet)
     
     String.concat "\n\n" (
         [header]
         @ docHeader
-        @ [teams]
         @ eventTables
         @ ["\\end{document}"]
     )
@@ -543,56 +541,87 @@ let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDecla
     |> List.groupBy (fun (_, event, _) -> event)
     |> List.sumBy (fun (_, entries) -> scoreEvent entries meet yourRoster)
 
+let inline bump (h : Hist) pts =
+    let cnt = if h.ContainsKey pts then h.[pts] else 0
+    h.[pts] <- cnt + 1
+
 type PlacementStats =
-    { ExpectedPts : float
-      PlacementProb : Map<int,float> }   // place → probability
+  { Expected       : Map<Identifier,float>      // team → mean points
+    Histograms     : Map<Identifier,Hist>       // team → histogram
+    PlacementProb  : Map<int,float> }           // your team, place → P  // place → probability
 
 let placementStats
-        (trials       : int)
-        (assignment   : Assignment)
-        (state        : EvalState)
-        (meet         : MeetDeclaration)
-        (yourRoster   : Set<Identifier>)
-        (opponents    : AthleteDeclaration list)
-        (yourTeam     : Identifier) : PlacementStats =
+        (trials      : int)
+        (assignment  : Assignment)
+        (state       : EvalState)
+        (meet        : MeetDeclaration)
+        (yourRoster  : Set<Identifier>)
+        (opponents   : AthleteDeclaration list)
+        (yourTeam    : Identifier) : PlacementStats =
 
-    let pointsAccumulator = ref 0.0
-    let placeCounts       = Dictionary<int,int>()
+    // team  ->  histogram(points -> count)
+    let teamHists = Dictionary<Identifier,Hist>()
 
-    for _trial in 1 .. trials do
-        // simulate one entire meet
+    // ensure that a histogram exists for a team
+    let ensure team =
+        if not (teamHists.ContainsKey team) then teamHists.[team] <- Hist()
 
-        let teamPoints = simulateMeetOnce yourTeam assignment state meet yourRoster opponents
+    // bump a (mutable) histogram
+    let bump (hist:Hist) pts =
+        let cur = if hist.ContainsKey pts then hist.[pts] else 0
+        hist.[pts] <- cur + 1
 
-        // your total
-        let myPts = Map.tryFind yourTeam teamPoints |> Option.defaultValue 0
+    // placement histogram for *your* team only
+    let placeCounts = Dictionary<int,int>()
 
-        // keep running mean
-        pointsAccumulator := !pointsAccumulator + float myPts
+    for _ = 1 to trials do
+        // simulate an entire meet -> team → points map
+        let teamPoints =
+            simulateMeetOnce yourTeam assignment state meet yourRoster opponents
 
-        // determine placement (1 = win)
+        // update every team’s histogram
+        for KeyValue(team,pts) in teamPoints do
+            ensure team
+            bump teamHists.[team] pts
+
+        // rank teams by points (ties keep stable order)
         let sorted =
             teamPoints
             |> Map.toList
             |> List.sortByDescending snd
 
-        let myPlace =
-            sorted
-            |> List.findIndex (fun (t,_) -> t = yourTeam)
-            |> (+) 1                   // 0‑based → 1‑based
+        match List.tryFindIndex (fun (t,_) -> t = yourTeam) sorted with
+        | Some idx ->
+            let place = idx + 1          // 0‑based → 1‑based
+            bump placeCounts place
+        | None ->
+            // your team scored 0 and wasn't present – treat as last place
+            let last = List.length sorted + 1
+            bump placeCounts last
 
-        // increment histogram
-        let cur = if placeCounts.ContainsKey myPlace then placeCounts.[myPlace] else 0
-        placeCounts.[myPlace] <- cur + 1
+    // convert mutable histograms to immutable
+    let expected =
+        teamHists
+        |> Seq.map (fun (KeyValue(team,hist)) ->
+            let weightedSum =
+                hist |> Seq.sumBy (fun (KeyValue(pts,cnt)) ->
+                          float pts * float cnt)
+            let mean = weightedSum / float trials
+            team, mean)
+        |> Map.ofSeq
 
-    let expectedPts = !pointsAccumulator / float trials
+    let histograms =
+        teamHists |> Seq.map (|KeyValue|) |> Map.ofSeq
+
     let placementProb =
         placeCounts
         |> Seq.map (|KeyValue|)
         |> Seq.map (fun (pl,cnt) -> pl, float cnt / float trials)
         |> Map.ofSeq
 
-    { ExpectedPts = expectedPts; PlacementProb = placementProb }
+    { Expected      = expected
+      Histograms    = histograms
+      PlacementProb = placementProb }
 
 // Gets a list of all opposing athletes
 let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: EvalState) : AthleteDeclaration list =
@@ -650,8 +679,11 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
         |> List.map (fun a ->
             let st = placementStats trials a state meet roster opponents team
             (a, st))
-        |> List.maxBy (fun (_,st) -> st.ExpectedPts)
-    state, {meet = meet; team = team; assignment = bestAssignment; expected = stats.ExpectedPts; placement = stats.PlacementProb }
+        |> List.maxBy (fun (_,st) ->
+            st.Expected |> Map.tryFind team |> Option.defaultValue 0.0)
+    let expPts =
+        stats.Expected |> Map.tryFind team |> Option.defaultValue 0.0
+    state, {meet = meet; team = team; assignment = bestAssignment; expected = expPts; placement = stats.PlacementProb; expectedAll = stats.Expected; histograms = stats.Histograms}
 
 // ----------------------- LaTeX Formatting for Optimizer --------------------------
 
@@ -676,11 +708,19 @@ let optimizationDocHeader meet o =
             sprintf "%d%s: %.0f\\%%" pl (suffix pl) (prob * 100.0))
         |> String.concat ", "
 
+    let expectedLines =
+        o.expectedAll
+        |> Map.toList
+        |> List.sortByDescending snd
+        |> List.map (fun (team,mu) ->
+            sprintf "\\quad %s: %.1f\\\\" team mu)
+
     [ sprintf "\\section*{Optimization for Meet: %s}"                meet.Name
       sprintf "\\textbf{Events}: %s\\\\"                             eventString
       sprintf "\\noindent\\textbf{Scoring}: %s\\\\"                  scoringString
-      sprintf "\\noindent Expected Score for %s at %s: %.1f\\\\"     o.team meet.Name o.expected
-      sprintf "\\noindent\\textbf{Placement Probabilities} (1 -- 4): %s\\\\"    placementString ]
+      sprintf "\\noindent\\textbf{Placement Probabilities for %s}: %s\\\\" o.team placementString
+      sprintf "\\noindent\\textbf{Expected Team Scores}: \\\\" ]
+    @ expectedLines
 
 /// Builds the event table for each of the optimized events
 let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
@@ -723,13 +763,11 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
 let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimization) : string =
     let header = latexHeaderMeet
     let docHeader = optimizationDocHeader optimization.meet
-    let teams = teamList optimization.meet
     let eventTables = optimization.meet.Events |> List.map (optimizedEventTable state optimization)
     
     String.concat "\n\n" (
         [header]
         @ docHeader optimization
-        @ [teams]
         @ eventTables
         @ ["\\end{document}"]
     )
