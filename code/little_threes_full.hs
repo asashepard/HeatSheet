@@ -210,7 +210,7 @@ add AnthonyAririguzoh        to Wesleyan;
 let meet LittleThrees,
     events: 100m, 200m, 400m, 4x100m, 4x400m,
     scoring: 1st: 10, 2nd: 8, 3rd: 6, 4th: 5, 5th: 4, 6th: 3, 7th: 2, 8th: 1,
-    maxEventsPerAthlete: 3;
+    maxEventsPerAthlete: 2;
 
 include Williams in LittleThrees;
 include Amherst in LittleThrees;

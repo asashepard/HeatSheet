@@ -822,8 +822,8 @@ let generateGreedyAssignment
             match ev with
             // ─── relay cases ───
             | "4x100m" ->
-                // penalty: 0.25s × 3 exchanges
-                let penalty = 0.25 * 3.0
+                // benefit: 0.25s × 3 exchanges
+                let benefit = 0.25 * 3.0
                 // gather (name,split) for anyone who has or can predict a 100m
                 let splits =
                     athletes
@@ -833,14 +833,14 @@ let generateGreedyAssignment
                 // all quartets of 4
                 comb 4 splits
                 |> List.collect (fun quartet ->
-                    let time = List.sumBy snd quartet + penalty
+                    let time = List.sumBy snd quartet - benefit
                     // emit one triple per runner
                     quartet |> List.map (fun (nm,_) -> (nm, ev, time))
                 )
 
             | "4x400m" ->
-                // penalty: 1.0s × 3 exchanges
-                let penalty = 1.0 * 3.0
+                // benefit: 0.7s × 3 exchanges
+                let benefit = 0.7 * 3.0
                 let splits =
                     athletes
                     |> List.choose (fun a ->
@@ -848,7 +848,7 @@ let generateGreedyAssignment
                         |> Option.map (fun t -> a.Name, t))
                 comb 4 splits
                 |> List.collect (fun quartet ->
-                    let time = List.sumBy snd quartet + penalty
+                    let time = List.sumBy snd quartet - benefit
                     quartet |> List.map (fun (nm,_) -> (nm, ev, time))
                 )
 
