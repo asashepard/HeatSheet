@@ -4,6 +4,9 @@ open AST
 open LatexCreator
 open System
 open System.Collections.Generic
+open System.Threading.Tasks
+open System.Collections.Concurrent
+open System.Threading
 
 // --------------------------------  Environment ------------------------------
 
@@ -20,7 +23,7 @@ type EvalState = {
 }
 
 type Assignment = (Identifier * Identifier) list
-type Hist = Dictionary<int,int>
+type Hist = ConcurrentDictionary<int,int>
 type Optimization = {
     meet: MeetDeclaration
     team: Identifier
@@ -557,10 +560,11 @@ let placementStats
         (meet        : MeetDeclaration)
         (yourRoster  : Set<Identifier>)
         (opponents   : AthleteDeclaration list)
-        (yourTeam    : Identifier) : PlacementStats =
+        (yourTeam    : Identifier)
+        (updateProgress : unit -> unit) : PlacementStats =
 
     // team  ->  histogram(points -> count)
-    let teamHists = Dictionary<Identifier,Hist>()
+    let teamHists = ConcurrentDictionary<Identifier,Hist>()
 
     // ensure that a histogram exists for a team
     let ensure team =
@@ -572,9 +576,9 @@ let placementStats
         hist.[pts] <- cur + 1
 
     // placement histogram for *your* team only
-    let placeCounts = Dictionary<int,int>()
+    let placeCounts = ConcurrentDictionary<int,int>()
 
-    for _ = 1 to trials do
+    Parallel.For(1, trials + 1, fun trial ->
         // simulate an entire meet -> team → points map
         let teamPoints =
             simulateMeetOnce yourTeam assignment state meet yourRoster opponents
@@ -598,6 +602,9 @@ let placementStats
             // your team scored 0 and wasn't present – treat as last place
             let last = List.length sorted + 1
             bump placeCounts last
+
+        updateProgress()
+    ) |> ignore
 
     // convert mutable histograms to immutable
     let expected =
@@ -644,6 +651,108 @@ let generateAssignments (athletes: AthleteDeclaration list) (events: Identifier 
         List.fold folder [ [] ] xs
     powerset possibleEntries
 
+let generateRandomAssignments 
+    (athletes: AthleteDeclaration list) 
+    (events: Identifier list) 
+    (numSamples: int)
+    (maxAthletesPerEvent: int option) : Assignment list =
+
+    let allEventSet = Set.ofList events
+
+    [ for _ in 1..numSamples ->
+        let mutable assignment: Assignment = []
+        let mutable eventCounts = Dictionary<Identifier, int>()
+
+        for a in athletes do
+            let eligibleEvents = a.Events |> List.filter allEventSet.Contains
+
+            // Shuffle eligible events
+            let shuffledEvents = eligibleEvents |> List.sortBy (fun _ -> rnd.Next())
+
+            // How many events can this athlete enter?
+            let maxEvs = defaultArg a.MaxEvents 2
+            let mutable assigned = 0
+
+            for e in shuffledEvents do
+                if assigned >= maxEvs then
+                    () // athlete full
+                else
+                    let countInEvent = if eventCounts.ContainsKey(e) then eventCounts.[e] else 0
+                    let eventRoom =
+                        match maxAthletesPerEvent with
+                        | Some max -> countInEvent < max
+                        | None -> true
+
+                    if eventRoom then
+                        assignment <- (a.Name, e) :: assignment
+                        eventCounts.[e] <- countInEvent + 1
+                        assigned <- assigned + 1
+
+        assignment ]
+
+
+/// Convert Time to seconds
+let scoreSecs = function
+  | Float f              -> f
+  | MinuteTime(m,s)      -> m*60. + s
+  | HourMinuteTime(h,m,s)-> h*3600. + m*60. + s
+
+/// Greedy assignment generator
+let generateGreedyAssignment
+    (state                : EvalState)
+    (athletes             : AthleteDeclaration list)
+    (events               : Identifier list)
+    (maxAthletesPerEvent  : int option)
+    : Assignment list =
+
+    // 1) build all (athlete,event,time) triples
+    let scoreSecs = function
+      | Float f                 -> f
+      | MinuteTime (m,s)        -> m*60.0 + s
+      | HourMinuteTime(h,m,s)   -> float h*3600.0 + float m*60.0 + s
+
+    let allPairs =
+      athletes
+      |> List.collect (fun a ->
+           a.PRs
+           |> List.filter (fun pr -> List.contains pr.Event events)
+           |> List.map    (fun pr -> a.Name, pr.Event, scoreSecs pr.Time)
+         )
+
+    let sorted =
+      allPairs |> List.sortBy (fun (_,_,t) -> t)
+
+    // 2) prepare mutable counters
+    let athleteCount = Dictionary<Identifier,int>()
+    let eventCount   = Dictionary<Identifier,int>()
+    let assignment   = ResizeArray<Identifier * Identifier>()
+
+    // 3) loop inside the function
+    for (ath,ev,_) in sorted do
+        // read “previous” counts via TryGetValue
+        let mutable prevAth = 0
+        ignore (athleteCount.TryGetValue(ath, &prevAth))
+        let mutable prevEv  = 0
+        ignore (eventCount.   TryGetValue(ev,  &prevEv))
+
+        // what max this athlete can do?
+        let athMax =
+          defaultArg
+            ((Map.find ath state.Athletes).MaxEvents)
+            2
+
+        // what max this event can take?
+        let evMax =
+          defaultArg maxAthletesPerEvent 100
+
+        if prevAth < athMax && prevEv < evMax then
+            assignment.Add (ath, ev)
+            athleteCount.[ath] <- prevAth + 1
+            eventCount.   [ev]  <- prevEv  + 1
+
+    // 4) back out to module‐level indent
+    [ assignment |> Seq.toList ]
+
 // Computes the optimal athlete to event assignments. 
 // Assumptions: 
 //      1. All opposing athletes run every event that they have a PR in
@@ -652,13 +761,12 @@ let generateAssignments (athletes: AthleteDeclaration list) (events: Identifier 
 let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Identifier>) (team: Identifier) =
     let athletes = roster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
     let opponents = getOpposingAthletes meet team state
-    let assignments = 
-        let allPossibleAssignments = generateAssignments athletes meet.Events
+    let assignment = 
+        let optimalAssignment = generateGreedyAssignment state athletes meet.Events meet.MaxAthletesPerEvent
         let respectsMeetLimit assignment =
             match meet.MaxAthletesPerEvent with
             | Some max -> assignment |> List.countBy snd |> List.forall (fun (_, count) -> count <= max)
             | None -> true
-
         let respectsAthleteLimits assignment =
             assignment
             |> List.groupBy fst
@@ -671,13 +779,30 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
                     | None -> true
                 | None -> false
             )
-        allPossibleAssignments
+        optimalAssignment
         |> List.filter (fun a -> respectsMeetLimit a && respectsAthleteLimits a)
-    let trials = 5000
+
+    let trials = 10000
+    let totalTasks = assignment.Length * trials
+    printfn "Running %d trials..." trials
+    let completed = ref 0
+    let printedPct = ref -1
+
+    let updateProgress () =
+        let soFar = Interlocked.Increment(completed)
+        let pct = 100 * soFar / totalTasks
+        if pct <> !printedPct then
+            lock printedPct (fun () ->
+                if pct <> !printedPct then
+                    printedPct := pct
+                    printf "\rGlobal Progress: %3d%%" pct
+                    stdout.Flush()
+            )
+
     let bestAssignment, stats =
-        assignments
+        assignment
         |> List.map (fun a ->
-            let st = placementStats trials a state meet roster opponents team
+            let st = placementStats trials a state meet roster opponents team updateProgress
             (a, st))
         |> List.maxBy (fun (_,st) ->
             st.Expected |> Map.tryFind team |> Option.defaultValue 0.0)
