@@ -194,9 +194,21 @@ let sortEvents (events: string list) (athlete: AthleteDeclaration) : string list
                 | None -> Choice4Of4 e
         )
 
+let inferredEvents (evs : string list) : string list =
+    evs
+    |> List.collect (function
+        | "100m"  -> ["200m"]
+        | "200m"  -> ["100m"; "400m"]
+        | "400m"  -> ["200m"]
+        | _       -> [])
+
 /// Gets all events an athlete can run or has a PR for
 let allEvents (athlete: AthleteDeclaration) (prEvents: string list) =
-    List.append athlete.Events prEvents |> List.distinct |> fun evs -> sortEvents evs athlete
+    let baseEvents   = athlete.Events @ prEvents
+    let withInferred = baseEvents @ inferredEvents baseEvents
+    withInferred
+    |> List.distinct
+    |> sortEvents <| athlete
 
 /// Gets the right suffix for the place. Only works up to 99
 let suffix place =
@@ -207,6 +219,40 @@ let suffix place =
     | 2 -> "nd"
     | 3 -> "rd"
     | _ -> "th"
+
+let (<|>) (a: 'a option) (b: 'a option) : 'a option =
+    match a with
+    | Some _ -> a
+    | None   -> b
+
+module PRPredictor =
+    let scaleTime (fromDist: float) (toDist: float) (time: float) (adjustment: float) : float =
+        let speed = fromDist / time
+        toDist / (speed / adjustment)
+
+    // conservative estimates based on our own experience as track athletes
+    let predict100mFrom200m (t200: float) : float = t200 / 1.95
+    let predict200mFrom100m (t100: float) : float = t100 * 2.05
+    let predict400mFrom200m (t200: float) : float = t200 * 2.0 + 5.0
+    let predict200mFrom400m (t400: float) : float = (t400 - 3.0) / 2.0
+
+    let estimatePR (athlete: AthleteDeclaration) (event: string) : float option =
+        let lookup e =
+            athlete.PRs
+            |> List.tryFind (fun pr -> pr.Event = e)
+            |> Option.map (fun pr ->
+                match pr.Time with
+                | Float f -> f
+                | MinuteTime (m, s) -> 60.0 * float m + s                
+                | HourMinuteTime(_, _, _) -> failwith "Not Implemented")
+
+        match event with
+        | "100m" -> lookup "100m" <|> (lookup "200m" |> Option.map predict100mFrom200m)
+        | "200m" -> lookup "200m"
+                    <|> (lookup "100m" |> Option.map predict200mFrom100m)
+                    <|> (lookup "400m" |> Option.map predict200mFrom400m)
+        | "400m" -> lookup "400m" <|> (lookup "200m" |> Option.map predict400mFrom200m)
+        | _      -> lookup event
 
 // ------------------------------------ LaTeX Formatting for RosterShow ----------------------------------
 
@@ -252,7 +298,10 @@ let formatEventRow (a: AthleteDeclaration) (event: string) : string * string =
     let pr =
         match List.tryFind (fun pr -> pr.Event = event) a.PRs with
         | Some pr -> formatTime pr.Time
-        | None -> ""
+        | None ->
+            match PRPredictor.estimatePR a event with
+            | Some t -> sprintf "\\textit{%.2f}" t
+            | None -> "N/A"
 
     displayEvent, pr
 
@@ -297,6 +346,8 @@ let buildRosterLatexDocument (state: EvalState) (roster: string) (athletes: Set<
         latexHeaderRoster
         $"\\section*{{Roster: {roster}}}"
         table
+        "\\smallskip"
+        "\\textit{\\footnotesize predicted PR based on other events}"
         "\\end{document}"
     ]
 
@@ -438,9 +489,9 @@ let expandPRs (assignment: Assignment) (state: EvalState) : (Identifier * Identi
     |> List.choose (fun (athlete, event) ->
         match Map.tryFind athlete state.Athletes with
         | Some a ->
-            match List.tryFind (fun pr -> pr.Event = event) a.PRs with 
-            | Some pr -> Some (athlete, event, pr.Time)
-            | None -> None
+            match PRPredictor.estimatePR a event with
+            | Some t -> Some (athlete, event, Float t)
+            | None   -> None
         | None -> None
     )
 
@@ -728,12 +779,15 @@ let generateGreedyAssignment
       | HourMinuteTime(h,m,s)   -> float h*3600.0 + float m*60.0 + s
 
     let allPairs =
-      athletes
-      |> List.collect (fun a ->
-           a.PRs
-           |> List.filter (fun pr -> List.contains pr.Event events)
-           |> List.map    (fun pr -> a.Name, pr.Event, scoreSecs pr.Time)
-         )
+        athletes
+        |> List.collect (fun a ->
+            events
+            |> List.choose (fun ev ->
+                // estimatePR returns seconds directly
+                PRPredictor.estimatePR a ev
+                |> Option.map (fun secs -> (a.Name, ev, secs))
+            )
+        )
 
     let sorted =
       allPairs |> List.sortBy (fun (_,_,t) -> t)

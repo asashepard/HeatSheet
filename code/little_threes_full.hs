@@ -12,7 +12,7 @@ let athlete WilliamMurray,
 
 let athlete YanniKakouris,
     events: 100m, 200m,
-    prs: 100m: 11.09, 200m: 22.07;
+    prs: 100m: 11.09, 200m: 20.07;
 
 let athlete BradyStahelski,
     events: 100m, 400m,
@@ -208,7 +208,7 @@ add HyattHicks               to Wesleyan;
 add AnthonyAririguzoh        to Wesleyan;
 
 let meet LittleThrees,
-    events: 100m, 200m, 400m,
+    events: 100m, 200m, 400m, 4x100m, 4x400m,
     scoring: 1st: 10, 2nd: 8, 3rd: 6, 4th: 5, 5th: 4, 6th: 3, 7th: 2, 8th: 1,
     maxEventsPerAthlete: 3;
 
