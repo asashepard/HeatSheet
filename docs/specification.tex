@@ -64,12 +64,18 @@
 
 \subsection*{Introduction}
 
-Managing a complete roster of track and field athletes is both time-consuming and difficult for coaches. Each athlete has a preferred event, the event they’re best at, and the event that they can score the most points in. Often, these are all different. For coaches, determining where athletes can perform best can be the difference between winning a meet and not. However, coaches tend to rely on intuition to determine the best event(s) for their athletes, which can be suboptimal in many cases. \\
+Managing a complete roster of track and field athletes is both time-consuming and difficult for coaches. 
+Each athlete has many events they can run, personal records (PRs) in these events, and a few best events for scoring points at meets. For coaches, determining where athletes can perform best can be the difference between winning a meet or not. However, coaches tend to rely on intuition to determine the best event(s) for their athletes, which can be suboptimal in many cases. \\
 
-Our language, HeatSheet, intends to streamline this process for coaches. By managing the roster under the hood, computing the expected points for an athlete in an event, and determining their comparative advantage, HeatSheet will complete all of the hard work for coaches. Given that many coaches aren’t too technical or familiar with programming languages, our language will be designed to be as simple as possible. It won’t require advanced syntax or programming knowledge to understand. Also, it will allow for coaches to overwrite our calculations if they strongly believe that an athlete should compete in a certain event (i.e. based on practice performance or gut feeling). The outputted text files will contain all the information a coach needs for a given athlete, roster, or competition.
+Our language, HeatSheet, intends to streamline this process for coaches. By managing the roster under the hood, computing the expected points for an athlete in an event, and determining their comparative advantage, HeatSheet will complete all of the hard work for coaches. 
+Given that many coaches aren’t too technical or familiar with programming languages, our language will be designed to be as simple as possible. It won’t require advanced syntax or programming knowledge to understand. 
+Also, it will allow for coaches to overwrite our calculations if they strongly believe that an athlete should compete in a certain event (i.e. based on practice performance or gut feeling). 
+The outputted PDF files will contain all the information a coach needs for a given athlete, roster, or competition, formatted in LaTeX.
 \subsection*{Design Principles}
 
-HeatSheet will have a ``coach-first'' design.  The language is built for track and field coaches, not programmers. Syntax and semantics prioritize readability, clarity, and domain familiarity. The language will be declarative, so coaches will be able to describe what they want, not how to do it step by step. HeatSheet will compute mostly under-the-hood, making it easy for coaches to quickly get the information they need. Athletes, rosters, and meets are modeled as composable objects, so users can easily adapt the same logic across different scenarios or competitions. The language will be designed to connect to a SQL backend that can efficiently and quickly handle the database for rosters, athletes, and meets. Ultimately, HeatSheet will be simple enough for dual meet planning, but powerful enough to handle championship meets or team selection for nationals if necessary.
+HeatSheet will have a ``coach-first'' design.  The language is built for track and field coaches, not programmers. Syntax and semantics prioritize readability, clarity, and domain familiarity. Whitespace will be entirely ignored in HeatSheet to allow coaches to format their programs as they see fit.
+The language will be declarative, so coaches will be able to describe what they want, not how to do it step by step. HeatSheet will compute mostly under-the-hood, making it easy for coaches to quickly get the information they need. 
+Athletes, rosters, and meets are modeled as composable objects, so users can easily adapt the same logic across different scenarios or competitions. Ultimately, HeatSheet will be simple enough for dual meet planning, but powerful enough to handle championship meets or team selection for nationals if necessary.
 
 \subsection*{Examples}
 
@@ -89,16 +95,21 @@ HeatSheet will have a ``coach-first'' design.  The language is built for track a
 
 Example 1:
 \begin{lstlisting}[language=,caption={HeatSheet Language Example 1}]
-let roster Williams
+let roster Williams;
+
 let athlete: YanniKakouris,
   events: 100m, 200m, 4x100m,
   prs:
     100m: 11.01,
-    200m: 22.42
-add YanniKakouris to Williams
+    200m: 22.42,
+  maxEvents: 1;
+
+add YanniKakouris to Williams;
+output roster Williams;
 \end{lstlisting}
 Example 1 defines a roster \texttt{Williams} and an athlete \texttt{YanniKakouris} with the specified events
-and personal records. It then adds \texttt{YanniKakouris} to the \texttt{Wililams} roster.
+and personal records, as well as an optional tag ``maxEvents''. It then adds \texttt{YanniKakouris} to the \texttt{Wililams} roster.
+Finally, it ouputs the roster to a PDF generated using LaTeX.
 
 \newpage
 Example 2:
@@ -107,14 +118,13 @@ let meet: StateChampionships,
   events: 100m, 200m, 400m, 4x100m, 4x400m,
   scoring: 1st: 10, 2nd: 8, 3rd: 6, 4th: 5,
            5th: 4, 6th: 3, 7th: 2, 8th: 1,
-  maxEventsPerAthlete: 4
+  maxEventsPerAthlete: 4;
 
-optimize YanniKakouris for StateChampionships 
-optimize Williams for StateChampionships        
+optimize Williams for StateChampionships;        
 \end{lstlisting}
 Example 2 defines a meet titled \texttt{StateChampionships} with the specified events, scoring system, and max events per athlete.
-It then optimizes \texttt{YanniKakouris} for this meet, placing him into the best possible events given his profile.
-Finally, it optimizes the entire \texttt{Williams} roster, placing each athlete into the best possible event to maximize score for \texttt{StateChampionships}.\\
+It then optimizes the entire \texttt{Williams} roster, placing each athlete into the best possible event to maximize score for \texttt{StateChampionships}. This optimize command 
+will generate a LaTeX file and PDF showing where to place each athlete. \\
 
 Example 3: 
 \begin{lstlisting}[language=,caption={HeatSheet Language Example 3}]
@@ -122,39 +132,38 @@ let athlete: AsaShepard,
   events: 400m, 800m, 4x400m,
   prs:
     400m: 48.68,
-    800m: 1:55.04
-add AsaShepard to Williams
+    800m: 1:55.04;
+add AsaShepard to Williams;
 
 let athlete: AmherstMammoth,
   events: 400m, 800m,
   prs:
     400m: 49.00,
-    800m: 1:56.00
-add AmherstMammoth to Amherst
+    800m: 1:56.00;
+add AmherstMammoth to Amherst;
 
-add Amherst to StateChampionships
-force AsaShepard to 4x400m
-force YanniKakouris to 100m
+add Amherst to StateChampionships;
 
-optimize Williams for StateChampionships
+optimize Williams for StateChampionships;
 
-remove AsaShepard from Williams
-remove YanniKakouris from Williams
+remove AsaShepard from Williams;
+remove YanniKakouris from Williams;
 \end{lstlisting}
 Example 3 defines another athlete, labeled \texttt{AsaShepard}. It then defines an athlete \texttt{AmherstMammoth} and places
-that athlete on the \texttt{Amherst} roster. It then includes them as a competitor at \texttt{StateChampionships}. Before optimizing the \texttt{Williams} roster
-given this new Amherst athlete, it forces \texttt{AsaShepard} and \texttt{YanniKakouris} into certain events. Finally, it removes 
+that athlete on the \texttt{Amherst} roster. It then includes them as a competitor at \texttt{StateChampionships}. Finally, it removes 
 \texttt{AsaShepard} and \texttt{YanniKakouris} from the \texttt{Williams} roster.
 
 \subsection*{Language Concepts}
 
-HeatSheet is built on a set of domain-specific objects, all composed from a small number of primitive types. These primitives include strings, integers and floats, booleans, lists. These primitives form the foundation for the language’s structured objects. The first is an athlete, a user-defined object that combines identifiers, eligible events, personal records, and other optional data. An event has a name, a type (individual or relay), and optional properties like scoring weight. A meet is a composite structure that bundles events together with a scoring system, global constraints, and scheduling rules. Coaches must understand what makes up each of these objects, which they already know from their experience coaching.
+HeatSheet is built on a set of domain-specific objects, all composed from a small number of primitive types. These primitives include strings, integers and floats, booleans, and lists. 
+These primitives form the foundation for the language’s structured objects. The first is an athlete, a user-defined object that combines identifiers, eligible events, personal records, and other optional data.
+A meet is a composite structure that bundles events together with a scoring system and global constraints. Coaches must understand what makes up each of these objects, which they already know from their experience coaching.
 
-Coaches can impose constraints to model the realities of competition, such as limiting an athlete to four events or forcing an athlete into a certain event, even if it may not be theoretically optimal. These goals shape how the system evaluates possible lineups.
+Coaches can impose constraints to model the realities of competition, such as limiting an athlete to four events, even if it may not be theoretically optimal. These goals shape how the system evaluates possible lineups.
 
 \subsection*{Formal Syntax}
 
-HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets.
+HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets. Semicolons mark the end of a statement, allowing for all whitespace to be ignored.
 
 \begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
   <program>             ::= <statement> ;+
