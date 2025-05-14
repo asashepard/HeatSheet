@@ -437,8 +437,51 @@ let expandPRs (assignment: Assignment) (state: EvalState) : (Identifier * Identi
     )
 
 // Gets a list of all of the opponents' personal records
-let getOpponentPRs opponents=
-    opponents |> List.collect (fun a -> a.PRs |> List.map (fun pr -> (a.Name, pr.Event, pr.Time)))
+let getOpponentPRs
+    (state: EvalState)
+    (meet: MeetDeclaration)
+    (opponents: AthleteDeclaration list)
+    : (Identifier * Identifier * Time) list =
+
+    // how many each team can enter in this meet
+    let maxPerEvent = defaultArg meet.MaxAthletesPerEvent System.Int32.MaxValue
+
+    // helper to sort times
+    let toSecs = function
+        | Float f               -> f
+        | MinuteTime(m,s)       -> m*60.0 + s
+        | HourMinuteTime(h,m,s) -> float h*(float)3600 + float m*(float)60 + s
+
+    opponents
+    // build (team,name,event,time) tuples
+    |> List.collect (fun a ->
+        a.PRs
+        |> List.filter (fun pr -> List.contains pr.Event meet.Events)
+        |> List.map (fun pr ->
+            // find which roster this athlete belongs to
+            let teamName =
+                state.Rosters
+                |> Seq.find (fun (KeyValue(t,members)) -> members.Contains a.Name)
+                |> fun (KeyValue(t,_)) -> t
+
+            (teamName, a.Name, pr.Event, pr.Time)
+            )
+        )
+    // group by event
+    |> List.groupBy (fun (_,_,ev,_) -> ev)
+    |> List.collect (fun (_ev, evEntries) ->
+        // within each event, group by team
+        evEntries
+        |> List.groupBy (fun (team,_,_,_) -> team)
+        |> List.collect (fun (_team, teamEntries) ->
+            teamEntries
+            // take the fastest `maxPerEvent` for this team/event
+            |> List.sortBy    (fun (_,_,_,t) -> toSecs t)
+            |> List.truncate  maxPerEvent
+            // drop the team tag again
+            |> List.map        (fun (_, name, ev, time) -> (name, ev, time))
+            )
+        )
 
 // Converts times into seconds for scoring purposes
 let scoreTime = function
@@ -490,7 +533,7 @@ let simulateMeetOnce
 
     // build once (deterministic structures)
     let yourEntries      = expandPRs yourAssignment state
-    let opponentEntries  = getOpponentPRs opponents
+    let opponentEntries  = getOpponentPRs state meet opponents
     let allEntries       = yourEntries @ opponentEntries      // (ath, event, PR)
     let groupedByEvent   = allEntries |> List.groupBy (fun (_,e,_) -> e)
 
@@ -537,7 +580,7 @@ let simulateMeetOnce
 let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) (opponents: AthleteDeclaration list) : int =
     let allEntries =
         let yourEntries = expandPRs assignment state
-        let opponentEntries = getOpponentPRs opponents
+        let opponentEntries = getOpponentPRs state meet opponents
         yourEntries @ opponentEntries
 
     allEntries
@@ -765,9 +808,9 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
     // 2a) get the ONE greedy assignment
     let initialAssign =
         generateGreedyAssignment 
-            state 
-            athletes 
-            meet.Events 
+            state
+            athletes
+            meet.Events
             meet.MaxAthletesPerEvent
             |> List.exactlyOne
 
@@ -873,7 +916,7 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
         | Some r -> r
         | None -> Set.empty
 
-    let opponentEntries = getOpponentPRs (getOpposingAthletes opt.meet opt.team state)
+    let opponentEntries = getOpponentPRs state opt.meet (getOpposingAthletes opt.meet opt.team state)
     let yourEntries = expandPRs opt.assignment state |> List.filter (fun (_, e, _) -> e = event)
     let allEntries = yourEntries @ (opponentEntries |> List.filter (fun (_, e, _) -> e = event))
 
