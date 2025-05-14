@@ -939,6 +939,26 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
     let trials    = 20000
     let hillIters = 2000
 
+    match state.OptimizationMethod with
+        | Basic ->
+            // just use greedy assignment and scoring, no simulation
+            let assignment = 
+                generateGreedyAssignment state athletes meet.Events meet.MaxAthletesPerEvent
+                |> List.exactlyOne
+
+            let score = float (scoreAssignment assignment state meet roster opponents)
+
+            state, {
+                meet = meet
+                team = team
+                assignment = assignment
+                expected = score
+                placement = Map.empty
+                expectedAll = Map.ofList [team, score]
+                histograms = Map.empty
+            }
+        | Simulation ->
+
     // 2a) get the ONE greedy assignment
     let initialAssign =
         generateGreedyAssignment 
@@ -1005,39 +1025,43 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
 // ----------------------- LaTeX Formatting for Optimizer --------------------------
 
 /// Optimization document header
-let optimizationDocHeader meet o =
+let optimizationDocHeader meet o optType =
     let eventString =
-        meet.Events
-        |> String.concat ", "
+        meet.Events |> String.concat ", "
 
-    // e.g. "1st: 10, 2nd: 8, …"
     let scoringString =
         meet.Scoring
         |> List.map (fun s -> sprintf "%d%s: %d" s.Place (suffix s.Place) s.Score)
         |> String.concat ", "
 
-    // e.g. "1st: 47 %, 2nd: 32 %, 3rd: 15 %"
-    let placementString =
-        o.placement
-        |> Map.toList
-        |> List.sortBy fst
-        |> List.map (fun (pl, prob) ->
-            sprintf "%d%s: %.0f\\%%" pl (suffix pl) (prob * 100.0))
-        |> String.concat ", "
+    // Only include these if Simulation
+    let placementLines =
+        match optType with
+        | Simulation ->
+            let placementString =
+                o.placement
+                |> Map.toList
+                |> List.sortBy fst
+                |> List.map (fun (pl, prob) ->
+                    sprintf "%d%s: %.0f\\%%" pl (suffix pl) (prob * 100.0))
+                |> String.concat ", "
 
-    let expectedLines =
-        o.expectedAll
-        |> Map.toList
-        |> List.sortByDescending snd
-        |> List.map (fun (team,mu) ->
-            sprintf "\\quad %s: %.1f\\\\" team mu)
+            let expectedLines =
+                o.expectedAll
+                |> Map.toList
+                |> List.sortByDescending snd
+                |> List.map (fun (team,mu) ->
+                    sprintf "\\quad %s: %.1f\\\\" team mu)
 
-    [ sprintf "\\section*{%s Optimization for Meet: %s}"             o.team meet.Name
-      sprintf "\\textbf{Events}: %s\\\\"                             eventString
-      sprintf "\\noindent\\textbf{Scoring}: %s\\\\"                  scoringString
-      sprintf "\\noindent\\textbf{Placement Probabilities for %s}: %s\\\\" o.team placementString
-      sprintf "\\noindent\\textbf{Expected Team Scores}: \\\\" ]
-    @ expectedLines
+            [ sprintf "\\noindent\\textbf{Placement Probabilities for %s}: %s\\\\" o.team placementString
+              "\\noindent\\textbf{Expected Team Scores}: \\\\" ]
+            @ expectedLines
+        | Basic -> []
+
+    [ sprintf "\\section*{%s Optimization for Meet: %s}" o.team meet.Name
+      sprintf "\\textbf{Events}: %s\\\\" eventString
+      sprintf "\\noindent\\textbf{Scoring}: %s\\\\" scoringString ]
+    @ placementLines
 
 /// Builds the event table for each of the optimized events
 let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
@@ -1145,12 +1169,12 @@ let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) :
 /// Constructs the full LaTeX document string for a meet
 let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimization) : string =
     let header = latexHeaderMeet
-    let docHeader = optimizationDocHeader optimization.meet
+    let docHeader = optimizationDocHeader optimization.meet optimization state.OptimizationMethod
     let eventTables = optimization.meet.Events |> List.map (optimizedEventTable state optimization)
     
     String.concat "\n\n" (
         [header]
-        @ docHeader optimization
+        @ docHeader
         @ eventTables
         @ ["\\end{document}"]
     )

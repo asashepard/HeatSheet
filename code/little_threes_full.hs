@@ -1,3 +1,5 @@
+set optimization type to simulation;
+
 let athlete PierreLouisSheehan,
     events: 100m,
     prs: 100m: 10.88;
