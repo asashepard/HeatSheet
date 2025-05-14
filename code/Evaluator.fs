@@ -2,6 +2,8 @@ module Evaluator
 
 open AST
 open LatexCreator
+open System
+open System.Collections.Generic
 
 // --------------------------------  Environment ------------------------------
 
@@ -22,7 +24,8 @@ type Optimization = {
     meet: MeetDeclaration
     team: Identifier
     assignment: Assignment
-    bestScore: int
+    expected: float
+    placement: Map<int, float>
 }
 
 
@@ -392,6 +395,34 @@ let generateLatexMeetShow (state: EvalState) (meetId: Identifier) (path: string 
 
 // ----------------------- Optimizer --------------------------
 
+let cvLookup (event : Identifier) =
+    match event with
+    | e when e.StartsWith "100"   -> 0.010
+    | e when e.StartsWith "200"   -> 0.010
+    | e when e.StartsWith "400"   -> 0.010
+    | e when e.StartsWith "800"   -> 0.010
+    | e when e.StartsWith "1500"  -> 0.010
+    | e when e.StartsWith "3000"  -> 0.014
+    | e when e.StartsWith "5000"  -> 0.014
+    | e when e.StartsWith "10000" -> 0.014
+    | _ -> 0.012
+
+// convert PR time (seconds) to *mean* of log‑normal (≈ 1.5 % slower than PR)
+let seasonMean secs = secs * 1.015
+
+let rnd = Random()
+
+/// sample a performance time (seconds) given event id and PR (seconds)
+let sampleTime (event : Identifier) (prSecs : float) : float =
+    let cv   = cvLookup event               // e.g. 0.010
+    let sigma = log (1.0 + cv)              // σ of log‑space normal
+    let mu    = log (seasonMean prSecs)     // μ of log‑space normal
+    // Box‑Muller transform for N(0,1)
+    let u1 = rnd.NextDouble()
+    let u2 = rnd.NextDouble()
+    let z  = sqrt(-2.0 * log u1) * cos (2.0 * Math.PI * u2)
+    exp (mu + sigma * z)
+
 // Expands the roster's athletes personal records into a list
 let expandPRs (assignment: Assignment) (state: EvalState) : (Identifier * Identifier * Time) list =
     assignment
@@ -425,6 +456,82 @@ let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDecla
     )
     |> List.sum
 
+let scoreEventStochastic
+        (entries     : (Identifier * Identifier * Time) list)
+        (meet        : MeetDeclaration)
+        (yourRoster  : Set<Identifier>) : int =
+
+    // convert every athlete’s PR to a simulated mark
+    let sampled =
+        entries
+        |> List.map (fun (name, event, t) ->
+            let seconds = scoreTime t
+            let simMark = sampleTime event seconds
+            (name, event, simMark))
+
+    // rank lower time = better place
+    sampled
+    |> List.sortBy (fun (_,_,sec) -> sec)
+    |> List.mapi (fun i (ath,_,_) ->
+        if i < List.length meet.Scoring then
+            let pts = meet.Scoring.[i].Score
+            if Set.contains ath yourRoster then pts else 0
+        else 0)
+    |> List.sum
+
+let simulateMeetOnce
+        (yourTeam       : Identifier)
+        (yourAssignment : Assignment)
+        (state          : EvalState)
+        (meet           : MeetDeclaration)
+        (yourRoster     : Set<Identifier>)
+        (opponents      : AthleteDeclaration list) : Map<Identifier,int> =
+
+    // build once (deterministic structures)
+    let yourEntries      = expandPRs yourAssignment state
+    let opponentEntries  = getOpponentPRs opponents
+    let allEntries       = yourEntries @ opponentEntries      // (ath, event, PR)
+    let groupedByEvent   = allEntries |> List.groupBy (fun (_,e,_) -> e)
+
+    // dictionary team → points
+    let totals = Dictionary<Identifier,int>()
+    totals.[yourTeam] <- 0
+
+    // helper to add points
+    let inline addPts team pts =
+        let cur = if totals.ContainsKey team then totals.[team] else 0
+        totals.[team] <- cur + pts
+
+    // simulate every event
+    for (_,entries) in groupedByEvent do
+        // sample marks
+        let sampled =
+            entries
+            |> List.map (fun (ath,event,t) ->
+                let sec = scoreTime t
+                let mark = sampleTime event sec
+                (ath,event,mark))
+
+        // rank
+        sampled
+        |> List.sortBy (fun (_,_,sec) -> sec)
+        |> List.mapi (fun place (ath,_,_) ->
+            if place < List.length meet.Scoring then
+                let pts = meet.Scoring.[place].Score
+                // which team is this athlete on?
+                let team =
+                    if Set.contains ath yourRoster then yourTeam  // you may store it
+                    else                                           // look up in roster map
+                        state.Rosters
+                        |> Seq.pick (fun kv ->
+                            let (teamName, members) = kv.Key, kv.Value
+                            if members.Contains ath then Some teamName else None)
+                addPts team pts)
+        |> ignore
+
+    // convert to immutable Map
+    totals |> Seq.map (|KeyValue|) |> Map.ofSeq
+
 /// Gets the total team score for a certain assignment
 let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) (opponents: AthleteDeclaration list) : int =
     let allEntries =
@@ -435,6 +542,57 @@ let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDecla
     allEntries
     |> List.groupBy (fun (_, event, _) -> event)
     |> List.sumBy (fun (_, entries) -> scoreEvent entries meet yourRoster)
+
+type PlacementStats =
+    { ExpectedPts : float
+      PlacementProb : Map<int,float> }   // place → probability
+
+let placementStats
+        (trials       : int)
+        (assignment   : Assignment)
+        (state        : EvalState)
+        (meet         : MeetDeclaration)
+        (yourRoster   : Set<Identifier>)
+        (opponents    : AthleteDeclaration list)
+        (yourTeam     : Identifier) : PlacementStats =
+
+    let pointsAccumulator = ref 0.0
+    let placeCounts       = Dictionary<int,int>()
+
+    for _trial in 1 .. trials do
+        // simulate one entire meet
+
+        let teamPoints = simulateMeetOnce yourTeam assignment state meet yourRoster opponents
+
+        // your total
+        let myPts = Map.tryFind yourTeam teamPoints |> Option.defaultValue 0
+
+        // keep running mean
+        pointsAccumulator := !pointsAccumulator + float myPts
+
+        // determine placement (1 = win)
+        let sorted =
+            teamPoints
+            |> Map.toList
+            |> List.sortByDescending snd
+
+        let myPlace =
+            sorted
+            |> List.findIndex (fun (t,_) -> t = yourTeam)
+            |> (+) 1                   // 0‑based → 1‑based
+
+        // increment histogram
+        let cur = if placeCounts.ContainsKey myPlace then placeCounts.[myPlace] else 0
+        placeCounts.[myPlace] <- cur + 1
+
+    let expectedPts = !pointsAccumulator / float trials
+    let placementProb =
+        placeCounts
+        |> Seq.map (|KeyValue|)
+        |> Seq.map (fun (pl,cnt) -> pl, float cnt / float trials)
+        |> Map.ofSeq
+
+    { ExpectedPts = expectedPts; PlacementProb = placementProb }
 
 // Gets a list of all opposing athletes
 let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: EvalState) : AthleteDeclaration list =
@@ -486,27 +644,43 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
             )
         allPossibleAssignments
         |> List.filter (fun a -> respectsMeetLimit a && respectsAthleteLimits a)
-    let bestAssignment, bestScore =
+    let trials = 5000
+    let bestAssignment, stats =
         assignments
-        |> List.map (fun a -> a, scoreAssignment a state meet roster opponents)
-        |> List.maxBy snd
-    state, {meet = meet; team = team; assignment = bestAssignment; bestScore = bestScore}
+        |> List.map (fun a ->
+            let st = placementStats trials a state meet roster opponents team
+            (a, st))
+        |> List.maxBy (fun (_,st) -> st.ExpectedPts)
+    state, {meet = meet; team = team; assignment = bestAssignment; expected = stats.ExpectedPts; placement = stats.PlacementProb }
 
 // ----------------------- LaTeX Formatting for Optimizer --------------------------
 
 /// Optimization document header
 let optimizationDocHeader meet o =
-    let eventStringList = String.concat ", " meet.Events
-    let scoringStringList =
-        meet.Scoring
-        |> List.map (fun s -> $"{s.Place}{suffix s.Place}: {s.Score}")
+    let eventString =
+        meet.Events
         |> String.concat ", "
-    [
-        $"\\section*{{Optimization for Meet: {meet.Name}}}"
-        $"\\textbf{{Events}}: {eventStringList}\\\\"
-        $"\\noindent\\textbf{{Scoring}}: {scoringStringList}\\\\"
-        $"\\noindent Expected Score for {o.team} at {meet.Name}: {o.bestScore}\\\\"
-    ]
+
+    // e.g. "1st: 10, 2nd: 8, …"
+    let scoringString =
+        meet.Scoring
+        |> List.map (fun s -> sprintf "%d%s: %d" s.Place (suffix s.Place) s.Score)
+        |> String.concat ", "
+
+    // e.g. "1st: 47 %, 2nd: 32 %, 3rd: 15 %"
+    let placementString =
+        o.placement
+        |> Map.toList
+        |> List.sortBy fst
+        |> List.map (fun (pl, prob) ->
+            sprintf "%d%s: %.0f\\%%" pl (suffix pl) (prob * 100.0))
+        |> String.concat ", "
+
+    [ sprintf "\\section*{Optimization for Meet: %s}"                meet.Name
+      sprintf "\\textbf{Events}: %s\\\\"                             eventString
+      sprintf "\\noindent\\textbf{Scoring}: %s\\\\"                  scoringString
+      sprintf "\\noindent Expected Score for %s at %s: %.1f\\\\"     o.team meet.Name o.expected
+      sprintf "\\noindent\\textbf{Placement Probabilities} (1 -- 4): %s\\\\"    placementString ]
 
 /// Builds the event table for each of the optimized events
 let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
