@@ -177,10 +177,12 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
                               athletes: <athlete-list>
 
   <athlete-declaration>   ::= let athlete <Identifier>,
-                              events: <event-list>
-                            | let athlete <Identifier>,
                               events: <event-list>,
                               PRs: <pr-list>
+                            | let athlete <Identifier>,
+                              events: <event-list>,
+                              PRs: <pr-list>,
+                              maxEvents: <pr-list>
 
   <athlete-update>        ::= update athlete <Identifier>,
                               events: <event-list>

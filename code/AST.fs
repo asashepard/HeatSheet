@@ -16,12 +16,14 @@ type AthleteDeclaration = {
     Name: Identifier
     Events: Identifier list
     PRs: PR list
+    MaxEvents: int option
 }
 
 type AthleteUpdate = {
     UpdateName: Identifier
     NewEvents: Identifier list
     NewPRs: PR list
+    NewMaxEvents: int option
 }
 
 

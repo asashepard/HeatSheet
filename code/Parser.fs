@@ -8,7 +8,7 @@ open AST
 let reserved = Set.ofList [
   "let"; "roster"; "athlete"; "update"; "events"; "prs"; "scoring"; "teams"; 
   "maxEventsPerAthlete"; "include"; "exclude"; "add"; "remove"; 
-  "from"; "to"; "in"; "output"; "optimize"; "for"; "set";
+  "from"; "to"; "in"; "output"; "optimize"; "for"; "set"; "maxEvents"
 ]
 /// List of valid suffixes for score entries
 let suffix = Set.ofList [ "st"; "nd"; "rd"; "th" ]
@@ -83,13 +83,19 @@ let eventList = pright (pright pcomma (pright (pstr "events") pcolon)) (pad iden
 /// Parses the list of athlete's PRs
 let athletePRs = pright (pright pcomma (pright (pstr "prs") pcolon)) (pad prList)
 
+/// Parses the max events for the athlete
+let athleteMaxEvents = pright (pright pcomma (pright (pad (pstr "maxEvents")) pcolon)) pnumber
+
+/// Makes max events optional 
+let athleteMaxEventsOptional = athleteMaxEvents |>> int |>> Some <|> presult None
+
 /// Parses the athletes body, including events and PRs
-let athleteBody = pseq eventList athletePRs id
+let athleteBody = pseq eventList (pseq athletePRs athleteMaxEventsOptional id) id
 
 /// Parses a full athlete declaration
 let athleteDecl =
     pseq athleteHeader athleteBody
-         (fun (name, (events, prs)) -> { Name = name; Events = events; PRs = prs }) <!> "athleteDecl"
+         (fun (name, (events, (prs, maxEvents))) -> { Name = name; Events = events; PRs = prs; MaxEvents = maxEvents }) <!> "athleteDecl"
 
 /// parser for athlete update header
 let athleteUpdateHeader = pright (pad (pseq (pstr "update") (pad (pstr "athlete")) snd)) pidentifier
@@ -97,7 +103,7 @@ let athleteUpdateHeader = pright (pad (pseq (pstr "update") (pad (pstr "athlete"
 /// Parsees the entire athlete update
 let athleteUpdate =
     pseq athleteUpdateHeader athleteBody
-         (fun (name, (events, prs)) -> { UpdateName = name; NewEvents = events; NewPRs = prs }) <!> "athleteUpdate"
+         (fun (name, (events, (prs, maxEvents))) -> { UpdateName = name; NewEvents = events; NewPRs = prs; NewMaxEvents = maxEvents }) <!> "athleteUpdate"
 
 
 /// parses an athletes name whose PR we are changing, based on keyword "set"

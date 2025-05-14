@@ -65,7 +65,7 @@ let declareMeet (state: EvalState)(m: MeetDeclaration) =
 
 /// Updates an athlete to something else.
 let updateAthlete (state: EvalState) (a: AthleteUpdate) =
-    if Map.containsKey a.UpdateName state.Athletes then { state with Athletes = state.Athletes.Add(a.UpdateName, {Name = a.UpdateName; Events = a.NewEvents; PRs = a.NewPRs}) }
+    if Map.containsKey a.UpdateName state.Athletes then { state with Athletes = state.Athletes.Add(a.UpdateName, {Name = a.UpdateName; Events = a.NewEvents; PRs = a.NewPRs; MaxEvents = a.NewMaxEvents}) }
     else ANF a.UpdateName
 
 /// Adds an athlete to a roster
@@ -412,6 +412,7 @@ let scoreTime = function
     | Float f -> f
     | MinuteTime (m, s) -> m * 60.0 + s
 
+
 let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) : int =
     entries
     |> List.sortBy (fun (_, _, t) -> scoreTime t)
@@ -423,6 +424,7 @@ let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDecla
     )
     |> List.sum
 
+/// Gets the total team score for a certain assignment
 let scoreAssignment (assignment: Assignment) (state: EvalState) (meet: MeetDeclaration) (yourRoster: Set<Identifier>) (opponents: AthleteDeclaration list) : int =
     let allEntries =
         let yourEntries = expandPRs assignment state
@@ -464,11 +466,25 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
     let opponents = getOpposingAthletes meet team state
     let assignments = 
         let allPossibleAssignments = generateAssignments athletes meet.Events
-        match meet.MaxAthletesPerEvent with
-        | Some max -> allPossibleAssignments |> List.filter (fun assignment ->
-                assignment |> List.countBy fst |> List.forall (fun (_, count) -> count <= max)
+        let respectsMeetLimit assignment =
+            match meet.MaxAthletesPerEvent with
+            | Some max -> assignment |> List.countBy snd |> List.forall (fun (_, count) -> count <= max)
+            | None -> true
+
+        let respectsAthleteLimits assignment =
+            assignment
+            |> List.groupBy fst
+            |> List.forall (fun (athlete, assignments) ->
+                let eventCount = assignments |> List.map snd |> Set.ofList |> Set.count
+                match Map.tryFind athlete state.Athletes with
+                | Some a ->
+                    match a.MaxEvents with
+                    | Some max -> eventCount <= max
+                    | None -> true
+                | None -> false
             )
-        | None -> allPossibleAssignments
+        allPossibleAssignments
+        |> List.filter (fun a -> respectsMeetLimit a && respectsAthleteLimits a)
     let bestAssignment, bestScore =
         assignments
         |> List.map (fun a -> a, scoreAssignment a state meet roster opponents)
@@ -478,7 +494,7 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
 // ----------------------- LaTeX Formatting for Optimizer --------------------------
 
 /// Optimization document header
-let optimizationDocHeader meet =
+let optimizationDocHeader meet o =
     let eventStringList = String.concat ", " meet.Events
     let scoringStringList =
         meet.Scoring
@@ -486,10 +502,12 @@ let optimizationDocHeader meet =
         |> String.concat ", "
     [
         $"\\section*{{Optimization for Meet: {meet.Name}}}"
-        $"Events: {eventStringList}\\\\"
-        $"Scoring: {scoringStringList}\\\\"
+        $"\\textbf{{Events}}: {eventStringList}\\\\"
+        $"\\noindent\\textbf{{Scoring}}: {scoringStringList}\\\\"
+        $"\\noindent Expected Score for {o.team} at {meet.Name}: {o.bestScore}\\\\"
     ]
 
+/// Builds the event table for each of the optimized events
 let optimizedEventTable (state: EvalState) (opt: Optimization) (event: string) : string =
     let yourAssignments =
         opt.assignment
@@ -535,7 +553,7 @@ let buildOptimizationLatexDocument (state: EvalState) (optimization: Optimizatio
     
     String.concat "\n\n" (
         [header]
-        @ docHeader
+        @ docHeader optimization
         @ [teams]
         @ eventTables
         @ ["\\end{document}"]
