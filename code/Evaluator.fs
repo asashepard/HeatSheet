@@ -640,56 +640,6 @@ let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: E
         | None -> []
     )
 
-// Generates all possible assignments for athlete, event combinations
-let generateAssignments (athletes: AthleteDeclaration list) (events: Identifier list) : Assignment list =
-    let possibleEntries =
-        athletes
-        |> List.collect (fun a ->
-            a.Events |> List.filter (fun e -> List.contains e events) |> List.map (fun e -> (a.Name, e)))
-    let powerset xs =
-        let folder acc x = List.fold (fun acc' subset -> (x :: subset) :: acc') acc acc
-        List.fold folder [ [] ] xs
-    powerset possibleEntries
-
-let generateRandomAssignments 
-    (athletes: AthleteDeclaration list) 
-    (events: Identifier list) 
-    (numSamples: int)
-    (maxAthletesPerEvent: int option) : Assignment list =
-
-    let allEventSet = Set.ofList events
-
-    [ for _ in 1..numSamples ->
-        let mutable assignment: Assignment = []
-        let mutable eventCounts = Dictionary<Identifier, int>()
-
-        for a in athletes do
-            let eligibleEvents = a.Events |> List.filter allEventSet.Contains
-
-            // Shuffle eligible events
-            let shuffledEvents = eligibleEvents |> List.sortBy (fun _ -> rnd.Next())
-
-            // How many events can this athlete enter?
-            let maxEvs = defaultArg a.MaxEvents 2
-            let mutable assigned = 0
-
-            for e in shuffledEvents do
-                if assigned >= maxEvs then
-                    () // athlete full
-                else
-                    let countInEvent = if eventCounts.ContainsKey(e) then eventCounts.[e] else 0
-                    let eventRoom =
-                        match maxAthletesPerEvent with
-                        | Some max -> countInEvent < max
-                        | None -> true
-
-                    if eventRoom then
-                        assignment <- (a.Name, e) :: assignment
-                        eventCounts.[e] <- countInEvent + 1
-                        assigned <- assigned + 1
-
-        assignment ]
-
 let isValidAssignment
     (assign : Assignment)
     (meet   : MeetDeclaration)
@@ -711,12 +661,6 @@ let isValidAssignment
             let maxE = defaultArg (Map.find ath state.Athletes).MaxEvents 2
             asgs.Length <= maxE)
     checkEventCapacity && checkAthleteLoads
-
-/// Convert Time to seconds
-let scoreSecs = function
-  | Float f              -> f
-  | MinuteTime(m,s)      -> m*60. + s
-  | HourMinuteTime(h,m,s)-> h*3600. + m*60. + s
 
 /// Greedy assignment generator
 let generateGreedyAssignment
