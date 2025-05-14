@@ -171,6 +171,7 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
                           | <output>
                           | <optimize>
                           | <duplicate>
+                          | <set-optimize-type>
   
   <roster-declaration>  ::= let roster <identifier>
                           | let roster <identifier>,
@@ -227,6 +228,8 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
   <duplicate>           ::= duplicate <athlete> to <identifier>
                           | duplicate <roster> to <identifier>
                           | duplicate <meet> to <identifier>
+
+  <set-optimize-type>   ::= set optimization type as <optimization-type>
   
   <athlete-list>        ::= <athlete> , <athlete>*
   <roster-list>         ::= <roster> , <roster>*
@@ -247,6 +250,8 @@ HeatSheet reads like a set of natural-language commands. A file is just a list o
   <athlete>             ::= <identifier>
   <roster>              ::= <identifier>
   <meet>                ::= <identifier>
+
+  <optimization-type>   ::= basic | simulation
 
   <identifier>          ::= (<letter> | <digit>)*
   <float>               ::= <int> . <int>

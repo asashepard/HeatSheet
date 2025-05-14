@@ -9,6 +9,10 @@ type Time =
 | MinuteTime of float * float
 | HourMinuteTime of float * float * float
 
+type OptimizationType =
+| Basic
+| Simulation
+
 type ScoreEntry = { Place: int; Score: int }
 
 type PR = { Event: Identifier; Time: Time }
@@ -119,5 +123,6 @@ type Statement =
     | MeetAdd of MeetAdd
     | MeetRemoval of MeetRemoval
     | Duplicate of Duplicate
+    | SetOptimizationType of OptimizationType
 
 type Program = Statement list

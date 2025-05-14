@@ -282,6 +282,21 @@ let optimizeMeet = pright (pad (pstr "for")) pidentifier
 /// Parses complete optimize statement
 let optimize = pseq optimizeTeam optimizeMeet (fun (team, meet) -> {Team = team; Meet = meet})
 
+/// Parses set optimization type
+let optimizationType = pad(pstr "basic") <|> pad(pstr "simulation")
+
+/// Parses the header for an optimization type
+let optimizationTypeHeader = pright (pright (pad(pstr "set")) (pad(pstr "optimization"))) (pright (pad(pstr "type")) (pad(pstr "to"))) 
+
+/// Parses a complete set optimization type
+let setOptimizationType = pseq optimizationTypeHeader optimizationType (
+        fun (_, t) ->
+            match t with 
+            | "basic" -> Basic
+            | "simulation" -> Simulation
+            | _ -> failwith "Unreachable: optimizationType only returns basic or simulation. "
+    )
+
 /// All of the possible statements in the language
 let athleteDeclStmt = athleteDecl |>> Athlete <!> "athleteDeclStmt"
 let rosterDeclStmt = rosterDecl  |>> Roster  <!> "rosterDeclStmt"
@@ -293,6 +308,7 @@ let PRChangeStmt = changePR |>> PRChange <!> "prChangeStmt"
 let meetDeclStmt = meetDecl |>> Meet <!> "meetDeclStmt"
 let meetRemoveStmt = meetRemoval |>> MeetRemoval <!> "meetRemoveStmt"
 let optimizeStmt = optimize |>> Optimize <!> "optimizeStmt"
+let setOptimizationTypeStmt = setOptimizationType |>> SetOptimizationType <!> "optimizationTypeStmt"
 let duplicationStmt =
     duplication |>> (fun ((typ, orig), newName) ->
         match typ with
@@ -304,7 +320,7 @@ let duplicationStmt =
 
 let pstatement =
     athleteDeclStmt <|> rosterDeclStmt <|> rosterAddStmt <|> rosterShow <|> 
-    meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt <|> 
+    meetDeclStmt <|> optimizeStmt <|> meetAddStmt <|> optimizeStmt <|> setOptimizationTypeStmt <|>
     athleteUpdateStmt <|> PRChangeStmt <|> rosterRemoveStmt <|> meetShow <|> duplicationStmt
 
 /// Parses a list of statements, requiring semicolons after each

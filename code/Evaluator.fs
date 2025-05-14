@@ -20,6 +20,9 @@ type EvalState = {
 
     // All the declared meets. 
     Meets: Map<Identifier, MeetDeclaration>
+
+    // The optimization type.
+    OptimizationMethod: OptimizationType
 }
 
 type Assignment = (Identifier * Identifier) list
@@ -34,12 +37,11 @@ type Optimization = {
     histograms: Map<Identifier, Hist>
 }
 
-
-
 let emptyState = {
     Athletes = Map.empty
     Rosters = Map.empty
     Meets = Map.empty
+    OptimizationMethod = Basic
 }
 
 // -----------------------------  Helpers -----------------------------------------
@@ -69,6 +71,12 @@ let declareRoster (state: EvalState) (r: RosterDeclaration) =
 let declareMeet (state: EvalState)(m: MeetDeclaration) =
     if Map.containsKey m.Name state.Meets then failwith $"Error: Meet {m.Name} already defined. Please use a different identifer."
     else {state with Meets = state.Meets.Add(m.Name, m)}
+
+/// Sets the method to optimize with
+let optimizationType state so= 
+    match so with
+    | Basic -> {state with OptimizationMethod = Basic}
+    | Simulation -> {state with OptimizationMethod = Simulation}
 
 // ----------------------  Variable Mutations / Redeclarations ----------------------
 
@@ -408,7 +416,7 @@ let cvLookup (event : Identifier) =
     | e when e.StartsWith "10000" -> 0.014
     | _ -> 0.012
 
-// convert PR time (seconds) to *mean* of log‑normal (≈ 1.5 % slower than PR)
+// convert PR time (seconds) to mean of log‑normal (about 1.5 % slower than PR)
 let seasonMean secs = secs * 1.015
 
 let rnd = Random()
@@ -416,8 +424,8 @@ let rnd = Random()
 /// sample a performance time (seconds) given event id and PR (seconds)
 let sampleTime (event : Identifier) (prSecs : float) : float =
     let cv   = cvLookup event               // e.g. 0.010
-    let sigma = log (1.0 + cv)              // σ of log‑space normal
-    let mu    = log (seasonMean prSecs)     // μ of log‑space normal
+    let sigma = log (1.0 + cv)              // std of log‑space normal
+    let mu    = log (seasonMean prSecs)     // mean of log‑space normal
     // Box‑Muller transform for N(0,1)
     let u1 = rnd.NextDouble()
     let u2 = rnd.NextDouble()
@@ -853,7 +861,7 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
             lock printedPct (fun () ->
                 if pct <> !printedPct then
                     printedPct := pct
-                    printf "\rGlobal Progress: %3d%%" pct
+                    printf "\rGlobal Progress: %3d%%\n" pct
                     stdout.Flush()
             )
 
@@ -1014,6 +1022,7 @@ let eval (prog: Program) =
             | RosterShow rs -> fst (rosterShow state rs)
             | MeetShow ms -> fst (meetShow state ms)
             | Optimize o -> fst (optimize state o)
+            | SetOptimizationType so -> optimizationType state so
         ) emptyState prog |> ignore
         0
     with
