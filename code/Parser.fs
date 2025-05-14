@@ -90,6 +90,9 @@ let eventList = pright (pright pcomma (pright (pstr "events") pcolon)) (pad iden
 /// Parses the list of athlete's PRs
 let athletePRs = pright (pright pcomma (pright (pstr "prs") pcolon)) (pad prList)
 
+/// Makes prList optional for athletes
+let athletePRsOptional = athletePRs <|> presult []
+
 /// Parses the max events for the athlete
 let athleteMaxEvents = pright (pright pcomma (pright (pad (pstr "maxEvents")) pcolon)) pnumber
 
@@ -97,7 +100,7 @@ let athleteMaxEvents = pright (pright pcomma (pright (pad (pstr "maxEvents")) pc
 let athleteMaxEventsOptional = athleteMaxEvents |>> int |>> Some <|> presult None
 
 /// Parses the athletes body, including events and PRs
-let athleteBody = pseq eventList (pseq athletePRs athleteMaxEventsOptional id) id
+let athleteBody = pseq eventList (pseq athletePRsOptional athleteMaxEventsOptional id) id
 
 /// Parses a full athlete declaration
 let athleteDecl =

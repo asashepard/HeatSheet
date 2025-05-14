@@ -126,7 +126,6 @@ let changePR (state: EvalState) (pc: SetPR) =
             if List.contains pc.NewPR.Event athlete.Events then athlete.Events
             else pc.NewPR.Event :: athlete.Events
         let updatedAthlete = { athlete with Events = updatedEvents; PRs = updatedPRs }
-        printfn "%A" updatedAthlete
         { state with Athletes = state.Athletes.Add(pc.Name, updatedAthlete) }
     | None -> ANF pc.Name
 
@@ -571,12 +570,16 @@ let generateLatexOptimization (state: EvalState) (optimization: Optimization) : 
 /// Main function for the roster show call
 let rosterShow state rs =
     match generateLatexRosterShow state rs.RosterToShowName rs.Path with
-    | Some path -> state, Some path
+    | Some path -> 
+        printfn "Successfully output roster %s to: %s" rs.RosterToShowName path
+        state, Some path
     | None -> RNF rs.RosterToShowName
 
 let meetShow state ms =
     match generateLatexMeetShow state ms.MeetToShowName ms.Path with
-    | Some path -> state, Some path
+    | Some path -> 
+        printfn "Successfully output meet %s to: %s" ms.MeetToShowName path 
+        state, Some path
     | None -> MNF ms.MeetToShowName
 
 // Runs the optimization statment
@@ -585,7 +588,9 @@ let optimize (state: EvalState) (o: Optimize) =
     | Some meet, Some roster -> 
             let state, optimization = runOptimization state meet roster o.Team
             match generateLatexOptimization state optimization with 
-            | Some path -> state, Some path
+            | Some path -> 
+                printfn "Successfully output the optimization for roster %s at meet %s to: %s" o.Team o.Meet path 
+                state, Some path
             | None -> failwith "Error: Optimization failed."
     | Some _, None ->   RNF o.Team
     | None, Some _ ->   MNF o.Meet
@@ -594,7 +599,7 @@ let optimize (state: EvalState) (o: Optimize) =
 // ----------------------  Evaluation ----------------------
 
 let eval (prog: Program) =
-    let finalState =
+    try 
         List.fold (fun state stmt ->
             match stmt with
             | Athlete a -> declareAthlete state a
@@ -610,5 +615,9 @@ let eval (prog: Program) =
             | RosterShow rs -> fst (rosterShow state rs)
             | MeetShow ms -> fst (meetShow state ms)
             | Optimize o -> fst (optimize state o)
-        ) emptyState prog
-    0
+        ) emptyState prog |> ignore
+        0
+    with
+    | ex -> 
+        printfn "%s" ex.Message
+        1

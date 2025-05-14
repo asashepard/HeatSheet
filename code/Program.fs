@@ -15,7 +15,5 @@ let main args =
     let result = parse fileContents
     //printfn "%A" result
     match result with
-    | Some p -> 
-        printfn "%A" (eval p)
+    | Some p -> eval p
     | None -> usage()
-    0
