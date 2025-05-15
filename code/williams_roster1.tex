@@ -1,7 +1,8 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{booktabs}
-\usepackage{longtable}
+\usepackage{ltablex}
+\keepXColumns
 \usepackage{tabularx}
 \usepackage{siunitx}
 \usepackage[table]{xcolor}
@@ -11,7 +12,7 @@
 \titleformat{\section}{\Large\bfseries\centering}{}{0em}{}
 \definecolor{rowgray}{gray}{0.95}
 \begin{document}
-\section*{Roster: Williams}
+\noindent\section*{Roster: Williams}
 \rowcolors{2}{gray!10}{white}
 \begin{tabularx}{\textwidth}{lXr}
 \toprule

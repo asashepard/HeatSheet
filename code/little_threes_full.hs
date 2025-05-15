@@ -1,4 +1,4 @@
-set optimization type to simulation;
+set optimization type to basic;
 
 let athlete PierreLouisSheehan,
     events: 100m,
@@ -8,11 +8,10 @@ let athlete OakSullivan,
     events: 100m, 400m,
     prs: 100m: 11.01, 400m: 50.83,
     maxEvents: 1;
-    
+
 let athlete YanniKakouris,
     events: 100m, 200m,
-    prs: 100m: 11.09, 200m: 22.07,
-    maxEvents: 1;
+    prs: 100m: 11.09, 200m: 22.07;
 
 let athlete BradyStahelski,
     events: 100m, 400m,
@@ -33,7 +32,8 @@ let athlete JordanDavis,
 
 let athlete OscarNewman,
     events: 200m, 400m,
-    prs: 200m: 21.53, 400m: 48.61;
+    prs: 200m: 21.53, 400m: 48.61,
+    maxEvents: 2;
 
 let athlete JacksonDavis,
     events: 200m, 400m,
@@ -62,9 +62,6 @@ let athlete AsaShepard,
 let athlete NoahStegmeier,
     events: 400m,
     prs: 400m: 52.16;
-
-force YanniKakouris to 100m;
-force OakSullivan to 400m;
 
 let roster Williams;
 
@@ -213,11 +210,12 @@ add AnthonyAririguzoh        to Wesleyan;
 let meet LittleThrees,
     events: 100m, 200m, 400m, 4x100m, 4x400m,
     scoring: 1st: 10, 2nd: 8, 3rd: 6, 4th: 5, 5th: 4, 6th: 3, 7th: 2, 8th: 1,
-    maxEventsPerAthlete: 2;
+    maxEntries: 2;
 
 include Williams in LittleThrees;
 include Amherst in LittleThrees;
 include Wesleyan in LittleThrees;
 
 output roster Williams to "williams_roster1";
+
 optimize Williams for LittleThrees;

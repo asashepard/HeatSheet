@@ -37,7 +37,7 @@ type Optimization = {
     expected: float
     placement: Map<int, float>
     expectedAll: Map<Identifier, float>
-    histograms: Map<Identifier, Hist>
+    histograms: Map<Identifier, Map<int, int>>
 }
 
 let emptyState = {
@@ -297,7 +297,8 @@ let latexHeaderRoster =
         "\\documentclass[11pt]{article}"
         "\\usepackage[margin=1in]{geometry}"
         "\\usepackage{booktabs}"
-        "\\usepackage{longtable}"
+        "\\usepackage{ltablex}"
+        "\\keepXColumns"
         "\\usepackage{tabularx}"
         "\\usepackage{siunitx}"
         "\\usepackage[table]{xcolor}"
@@ -379,7 +380,7 @@ let buildRosterLatexDocument (state: EvalState) (roster: string) (athletes: Set<
     let table = buildRosterTable state athletes
     String.concat "\n" [
         latexHeaderRoster
-        $"\\section*{{Roster: {roster}}}"
+        $"\\noindent\\section*{{Roster: {roster}}}"
         table
         "\\smallskip"
         "\\textit{\\footnotesize predicted PR based on other events}"
@@ -594,6 +595,10 @@ let scoreEvent (entries: (Identifier * Identifier * Time) list) (meet: MeetDecla
     )
     |> List.sum
 
+
+/// Simulates one single meet.
+/// Although this function uses a mutable Dictionary, it is MUCH faster than 
+/// the pure version. 
 let simulateMeetOnce
         (yourTeam       : Identifier)
         (yourAssignment : Assignment)
@@ -721,86 +726,71 @@ let inline bump (h : Hist) pts =
     h.[pts] <- cnt + 1
 
 type PlacementStats =
-  { Expected       : Map<Identifier,float>      // team → mean points
-    Histograms     : Map<Identifier,Hist>       // team → histogram
-    PlacementProb  : Map<int,float> }           // your team, place → P  // place → probability
+  { Expected       : Map<Identifier,float>
+    Histograms     : Map<Identifier, Map<int,int>>
+    PlacementProb  : Map<int,float> }
 
 let placementStats
-        (trials      : int)
-        (assignment  : Assignment)
-        (state       : EvalState)
-        (meet        : MeetDeclaration)
-        (yourRoster  : Set<Identifier>)
-        (opponents   : AthleteDeclaration list)
-        (yourTeam    : Identifier)
-        (updateProgress : unit -> unit) : PlacementStats =
+    (trials      : int)
+    (assignment  : Assignment)
+    (state       : EvalState)
+    (meet        : MeetDeclaration)
+    (yourRoster  : Set<Identifier>)
+    (opponents   : AthleteDeclaration list)
+    (yourTeam    : Identifier)
+    (updateProgress : unit -> unit) : PlacementStats =
 
-    // team  ->  histogram(points -> count)
-    let teamHists = ConcurrentDictionary<Identifier,Hist>()
+    let rec simulateTrials n accHists accPlaces =
+        if n = 0 then accHists, accPlaces
+        else
+            let teamPoints =
+                simulateMeetOnce yourTeam assignment state meet yourRoster opponents
 
-    // ensure that a histogram exists for a team
-    let ensure team =
-        if not (teamHists.ContainsKey team) then teamHists.[team] <- Hist()
+            // Update histograms for each team
+            let updatedHists =
+                teamPoints
+                |> Map.fold (fun hists team pts ->
+                    let hist = Map.tryFind team hists |> Option.defaultValue Map.empty
+                    let count = Map.tryFind pts hist |> Option.defaultValue 0
+                    Map.add team (Map.add pts (count + 1) hist) hists
+                ) accHists
 
-    // bump a (mutable) histogram
-    let bump (hist:Hist) pts =
-        let cur = if hist.ContainsKey pts then hist.[pts] else 0
-        hist.[pts] <- cur + 1
+            // Compute placement
+            let sorted =
+                teamPoints
+                |> Map.toList
+                |> List.sortByDescending snd
 
-    // placement histogram for *your* team only
-    let placeCounts = ConcurrentDictionary<int,int>()
+            let placement =
+                match List.tryFindIndex (fun (t, _) -> t = yourTeam) sorted with
+                | Some idx -> idx + 1
+                | None     -> List.length sorted + 1
 
-    Parallel.For(1, trials + 1, fun trial ->
-        // simulate an entire meet -> team → points map
-        let teamPoints =
-            simulateMeetOnce yourTeam assignment state meet yourRoster opponents
+            let updatedPlaces =
+                let cur = Map.tryFind placement accPlaces |> Option.defaultValue 0
+                Map.add placement (cur + 1) accPlaces
 
-        // update every team’s histogram
-        for KeyValue(team,pts) in teamPoints do
-            ensure team
-            bump teamHists.[team] pts
+            updateProgress()
+            simulateTrials (n - 1) updatedHists updatedPlaces
 
-        // rank teams by points (ties keep stable order)
-        let sorted =
-            teamPoints
-            |> Map.toList
-            |> List.sortByDescending snd
+    let teamHists, placeCounts = simulateTrials trials Map.empty Map.empty
 
-        match List.tryFindIndex (fun (t,_) -> t = yourTeam) sorted with
-        | Some idx ->
-            let place = idx + 1          // 0‑based → 1‑based
-            bump placeCounts place
-        | None ->
-            // your team scored 0 and wasn't present – treat as last place
-            let last = List.length sorted + 1
-            bump placeCounts last
-
-        updateProgress()
-    ) |> ignore
-
-    // convert mutable histograms to immutable
     let expected =
         teamHists
-        |> Seq.map (fun (KeyValue(team,hist)) ->
-            let weightedSum =
-                hist |> Seq.sumBy (fun (KeyValue(pts,cnt)) ->
-                          float pts * float cnt)
-            let mean = weightedSum / float trials
-            team, mean)
-        |> Map.ofSeq
-
-    let histograms =
-        teamHists |> Seq.map (|KeyValue|) |> Map.ofSeq
+        |> Map.map (fun _ hist ->
+            let weightedSum = hist |> Seq.sumBy (fun (KeyValue(k,v)) -> float k * float v)
+            weightedSum / float trials)
 
     let placementProb =
         placeCounts
-        |> Seq.map (|KeyValue|)
-        |> Seq.map (fun (pl,cnt) -> pl, float cnt / float trials)
-        |> Map.ofSeq
+        |> Map.map (fun _ count -> float count / float trials)
 
-    { Expected      = expected
-      Histograms    = histograms
-      PlacementProb = placementProb }
+    {
+        Expected = expected
+        Histograms = teamHists
+        PlacementProb = placementProb
+    }
+
 
 // Gets a list of all opposing athletes
 let getOpposingAthletes (meet: MeetDeclaration) (yourTeam: Identifier) (state: EvalState) : AthleteDeclaration list =
@@ -844,37 +834,29 @@ let generateGreedyAssignment
 
     let rec comb k xs =
         match k, xs with
-        | 0, _          -> [ [] ]
-        | _, []         -> []
-        | k, y :: ys    ->
-            (comb (k-1) ys |> List.map (fun zs -> y::zs))
-            @ comb k ys
+        | 0, _      -> [ [] ]
+        | _, []     -> []
+        | n, y::ys  ->
+            (comb (n - 1) ys |> List.map (fun zs -> y::zs))
+            @ comb n ys
 
-    // 1) build all (athlete,event,time) triples and relay cases
     let allPairs =
         events
         |> List.collect (fun ev ->
             match ev with
-            // ─── relay cases ───
             | "4x100m" ->
-                // benefit: 0.25s × 3 exchanges
                 let benefit = 0.25 * 3.0
-                // gather (name,split) for anyone who has or can predict a 100m
                 let splits =
                     athletes
                     |> List.choose (fun a ->
                         PRPredictor.estimatePR a "100m"
                         |> Option.map (fun t -> a.Name, t))
-                // all quartets of 4
                 comb 4 splits
                 |> List.collect (fun quartet ->
                     let time = List.sumBy snd quartet - benefit
-                    // emit one triple per runner
-                    quartet |> List.map (fun (nm,_) -> (nm, ev, time))
-                )
+                    quartet |> List.map (fun (nm, _) -> (nm, ev, time)))
 
             | "4x400m" ->
-                // benefit: 0.7s × 3 exchanges
                 let benefit = 0.7 * 3.0
                 let splits =
                     athletes
@@ -884,53 +866,60 @@ let generateGreedyAssignment
                 comb 4 splits
                 |> List.collect (fun quartet ->
                     let time = List.sumBy snd quartet - benefit
-                    quartet |> List.map (fun (nm,_) -> (nm, ev, time))
-                )
+                    quartet |> List.map (fun (nm, _) -> (nm, ev, time)))
 
-            // ─── individual events ───
             | _ ->
                 athletes
                 |> List.choose (fun a ->
                     PRPredictor.estimatePR a ev
-                    |> Option.map (fun t -> (a.Name, ev, t))
-                )
-        )
+                    |> Option.map (fun t -> (a.Name, ev, t))))
 
-    let sorted =
-      allPairs |> List.sortBy (fun (_,_,t) -> t)
+    let sorted = allPairs |> List.sortBy (fun (_, _, t) -> t)
 
-    // 2) prepare mutable counters
-    let athleteCount = Dictionary<Identifier,int>()
-    let eventCount   = Dictionary<Identifier,int>()
-    let assignment   = ResizeArray<Identifier * Identifier>()
+    let forcedPairs =
+        state.Forces
+        |> Map.toList
+        |> List.collect (fun (ath, evs) ->
+            evs |> Set.toList |> List.map (fun ev -> (ath, ev)))
 
-    // 3) loop inside the function
-    for (ath, ev, _) in sorted do
-        // read previous counts via TryGetValue
-        let mutable prevAth = 0
-        ignore (athleteCount.TryGetValue(ath, &prevAth))
-        let mutable prevEv  = 0
-        ignore (eventCount.TryGetValue(ev,  &prevEv))
+    let forcedSet = Set.ofList forcedPairs
 
-        let athMax =
-            defaultArg (Map.find ath state.Athletes).MaxEvents 2
+    let initAthleteCount =
+        forcedPairs |> List.countBy fst |> Map.ofList
 
-        let evMax =
-            defaultArg maxAthletesPerEvent 100
+    let initEventCount =
+        forcedPairs |> List.countBy snd |> Map.ofList
 
-        // check if this assignment respects the Forces map
-        let isForced =
-            match Map.tryFind ath state.Forces with
-            | Some forcedEvents -> Set.contains ev forcedEvents
-            | None -> true
+    let filteredSorted =
+        sorted |> List.filter (fun (a, e, _) -> not (Set.contains (a, e) forcedSet))
 
-        if prevAth < athMax && prevEv < evMax && isForced then
-            assignment.Add (ath, ev)
-            athleteCount.[ath] <- prevAth + 1
-            eventCount.[ev]    <- prevEv + 1
+    let rec assignLoop
+        (sorted : (Identifier * Identifier * float) list)
+        (assignment : Assignment)
+        (assignedSet : Set<Identifier * Identifier>)
+        (athleteCount : Map<Identifier, int>)
+        (eventCount : Map<Identifier, int>)
+        : Assignment =
+        match sorted with
+        | [] -> assignment
+        | (ath, ev, _) :: rest ->
+            let prevAth = Map.tryFind ath athleteCount |> Option.defaultValue 0
+            let prevEv = Map.tryFind ev eventCount |> Option.defaultValue 0
+            let athMax = defaultArg (Map.find ath state.Athletes).MaxEvents 2
+            let evMax = defaultArg maxAthletesPerEvent 100
 
-    // 4) back out to module‐level indent
-    [ assignment |> Seq.toList ]
+            if prevAth < athMax && prevEv < evMax then
+                assignLoop
+                    rest
+                    ((ath, ev) :: assignment)
+                    (Set.add (ath, ev) assignedSet)
+                    (Map.add ath (prevAth + 1) athleteCount)
+                    (Map.add ev (prevEv + 1) eventCount)
+            else
+                assignLoop rest assignment assignedSet athleteCount eventCount
+
+    [ assignLoop filteredSorted forcedPairs forcedSet initAthleteCount initEventCount ]
+
 
 let hillClimbOptim
     (initial : Assignment)
@@ -941,29 +930,35 @@ let hillClimbOptim
     (trials  : int)
     (iters   : int)
   =
-  let mutable bestA = initial
-  let mutable bestScore = scoreAssignment bestA state meet roster opps
-
   let rnd = System.Random()
-  for i in 1..iters do
-    // pick a random assignment index
-    let idx = rnd.Next(bestA.Length)
-    let (ath,oldEv) = bestA.[idx]
-    // choose one of ath's other events at random
-    let otherEs = 
-      (Map.find ath state.Athletes).Events
-      |> List.filter ((<>) oldEv)
-    if otherEs<>[] then
-      let newEv = otherEs.[ rnd.Next(otherEs.Length) ]
-      let candidate = bestA |> List.mapi (fun j ae -> if j=idx then (ath,newEv) else ae)
-      // check feasibility (max per‐event & per‐athlete)
-      if isValidAssignment candidate meet state then
-        let s = scoreAssignment candidate state meet roster opps
-        if s>bestScore then
-          bestScore <- s
-          bestA     <- candidate
 
-  bestA, bestScore
+  let rec loop i (bestA: (Identifier * Identifier) list, bestScore) =
+    if i > iters then bestA, bestScore
+    else
+      let idx = rnd.Next(bestA.Length)
+      let (ath, oldEv) = bestA.[idx]
+      let otherEs =
+        (Map.find ath state.Athletes).Events
+        |> List.filter ((<>) oldEv)
+      if otherEs = [] then
+        loop (i + 1) (bestA, bestScore)
+      else
+        let newEv = otherEs.[rnd.Next(otherEs.Length)]
+        let candidate =
+          bestA
+          |> List.mapi (fun j ae -> if j = idx then (ath, newEv) else ae)
+        if isValidAssignment candidate meet state then
+          let s = scoreAssignment candidate state meet roster opps
+          if s > bestScore then
+            loop (i + 1) (candidate, s)
+          else
+            loop (i + 1) (bestA, bestScore)
+        else
+          loop (i + 1) (bestA, bestScore)
+
+  let initialScore = scoreAssignment initial state meet roster opps
+  loop 1 (initial, initialScore)
+
 
 // Computes the optimal athlete to event assignments. 
 // Assumptions: 
@@ -977,87 +972,111 @@ let runOptimization (state: EvalState) (meet: MeetDeclaration) (roster: Set<Iden
     let hillIters = 2000
 
     match state.OptimizationMethod with
-        | Basic ->
-            // just use greedy assignment and scoring, no simulation
-            let assignment = 
-                generateGreedyAssignment state athletes meet.Events meet.MaxAthletesPerEvent
-                |> List.exactlyOne
-
-            let score = float (scoreAssignment assignment state meet roster opponents)
-
-            state, {
-                meet = meet
-                team = team
-                assignment = assignment
-                expected = score
-                placement = Map.empty
-                expectedAll = Map.ofList [team, score]
-                histograms = Map.empty
-            }
-        | Simulation ->
-
-    // 2a) get the ONE greedy assignment
-    let initialAssign =
-        generateGreedyAssignment 
-            state
-            athletes
-            meet.Events
-            meet.MaxAthletesPerEvent
+    | Basic ->
+        let assignment = 
+            generateGreedyAssignment state athletes meet.Events meet.MaxAthletesPerEvent
             |> List.exactlyOne
 
-    // sanity‐check
-    if not (isValidAssignment initialAssign meet state) then
-        failwith "Greedy produced an invalid assignment!"
+        let score = float (scoreAssignment assignment state meet roster opponents)
 
-    // 2b) score it
-    let baseScore = 
-        scoreAssignment initialAssign state meet roster opponents
-        |> float
+        let opponentScores =
+            meet.Teams
+            |> List.filter (fun t -> t <> team)
+            |> List.map (fun oppTeam ->
+                let oppRoster =
+                    match Map.tryFind oppTeam state.Rosters with
+                    | Some r -> r
+                    | None -> Set.empty
 
-    // 2c) hill‑climb to try to improve
-    let improvedAssign, improvedScore =
-        hillClimbOptim 
-            initialAssign 
-            state 
-            meet 
-            roster 
-            opponents 
-            trials 
-            hillIters
+                let oppAthletes = oppRoster |> Set.toList |> List.choose (fun name -> Map.tryFind name state.Athletes)
+                let oppAssignment =
+                    generateGreedyAssignment state oppAthletes meet.Events meet.MaxAthletesPerEvent
+                    |> List.exactlyOne
 
-    // pick the winner
-    let finalAssign, finalScore =
-        if float improvedScore > baseScore then
-            improvedAssign, float improvedScore
-        else
-            initialAssign, baseScore
-    
-    let totalTasks = finalAssign.Length * trials
-    printfn "Running %d trials..." trials
-    let completed = ref 0
-    let printedPct = ref -1
-
-    let updateProgress () =
-        let soFar = Interlocked.Increment(completed)
-        let pct = 100 * soFar / totalTasks
-        if pct <> !printedPct then
-            lock printedPct (fun () ->
-                if pct <> !printedPct then
-                    printedPct := pct
-                    printf "\rGlobal Progress: %3d%%\n" pct
-                    stdout.Flush()
+                let pts = float (scoreAssignment oppAssignment state meet oppRoster athletes)
+                (oppTeam, pts)
             )
 
-    let bestAssignment, stats =
-        [ finalAssign ]
-        |> List.map (fun a ->
-            let st = placementStats trials a state meet roster opponents team updateProgress
-            (a, st))
-        |> List.maxBy (fun (_,st) ->
-            st.Expected |> Map.tryFind team |> Option.defaultValue 0.0)
-    let expPts =
-        stats.Expected |> Map.tryFind team |> Option.defaultValue 0.0
-    state, {meet = meet; team = team; assignment = finalAssign; expected = expPts; placement = stats.PlacementProb; expectedAll = stats.Expected; histograms = stats.Histograms}
+        // Calculates expected score for basic mode
+        let expectedAll = Map.ofList ((team, score) :: opponentScores)
+
+        state, {
+            meet = meet
+            team = team
+            assignment = assignment
+            expected = score
+            placement = Map.empty
+            expectedAll = expectedAll
+            histograms = Map.empty
+        }
+
+    | Simulation ->
+        let initialAssign =
+            generateGreedyAssignment 
+                state
+                athletes
+                meet.Events
+                meet.MaxAthletesPerEvent
+            |> List.exactlyOne
+
+        if not (isValidAssignment initialAssign meet state) then failwith "Greedy produced an invalid assignment: too many forced athletes in one or more events."
+
+
+        let baseScore = 
+            scoreAssignment initialAssign state meet roster opponents
+            |> float
+
+        let improvedAssign, improvedScore =
+            hillClimbOptim 
+                initialAssign 
+                state 
+                meet 
+                roster 
+                opponents 
+                trials 
+                hillIters
+
+        let finalAssign, finalScore =
+            if float improvedScore > baseScore then
+                improvedAssign, float improvedScore
+            else
+                initialAssign, baseScore
+
+        let totalTasks = trials
+        printfn "Running %d trials..." trials
+        let completed = ref 0
+        let printedPct = ref -1
+
+        let updateProgress () =
+            let soFar = Interlocked.Increment(completed)
+            let pct = 100 * soFar / totalTasks
+            if pct <> !printedPct then
+                lock printedPct (fun () ->
+                    if pct <> !printedPct then
+                        printedPct := pct
+                        printf "\rGlobal Progress: %3d%%" pct
+                        stdout.Flush()
+                )
+
+        let bestAssignment, stats =
+            [ finalAssign ]
+            |> List.map (fun a ->
+                let st = placementStats trials a state meet roster opponents team updateProgress
+                (a, st))
+            |> List.maxBy (fun (_,st) ->
+                st.Expected |> Map.tryFind team |> Option.defaultValue 0.0)
+
+        let expPts = stats.Expected |> Map.tryFind team |> Option.defaultValue 0.0
+        state, {
+            meet = meet
+            team = team
+            assignment = bestAssignment
+            expected = expPts
+            placement = stats.PlacementProb
+            expectedAll = stats.Expected
+            histograms = stats.Histograms
+        }
+
 
 // ----------------------- LaTeX Formatting for Optimizer --------------------------
 
@@ -1227,14 +1246,14 @@ let generateLatexOptimization (state: EvalState) (optimization: Optimization) : 
 let rosterShow state rs =
     match generateLatexRosterShow state rs.RosterToShowName rs.Path with
     | Some path -> 
-        printfn "Successfully output roster %s to: %s" rs.RosterToShowName path
+        printfn "\nSuccessfully output roster %s to: %s" rs.RosterToShowName path
         state, Some path
     | None -> RNF rs.RosterToShowName
 
 let meetShow state ms =
     match generateLatexMeetShow state ms.MeetToShowName ms.Path with
     | Some path -> 
-        printfn "Successfully output meet %s to: %s" ms.MeetToShowName path 
+        printfn "\nSuccessfully output meet %s to: %s" ms.MeetToShowName path 
         state, Some path
     | None -> MNF ms.MeetToShowName
 
@@ -1245,7 +1264,7 @@ let optimize (state: EvalState) (o: Optimize) =
             let state, optimization = runOptimization state meet roster o.Team
             match generateLatexOptimization state optimization with 
             | Some path -> 
-                printfn "Successfully output the optimization for roster %s at meet %s to: %s" o.Team o.Meet path 
+                printfn "\nSuccessfully output the optimization for roster %s at meet %s to: %s" o.Team o.Meet path 
                 state, Some path
             | None -> failwith "Error: Optimization failed."
     | Some _, None ->   RNF o.Team

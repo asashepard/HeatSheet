@@ -7,7 +7,7 @@ open AST
 /// Identifer Parser
 let reserved = Set.ofList [
   "let"; "roster"; "athlete"; "update"; "events"; "prs"; "scoring"; "teams"; 
-  "maxEventsPerAthlete"; "include"; "exclude"; "add"; "remove"; "free";
+  "maxEntries"; "include"; "exclude"; "add"; "remove"; "free";
   "from"; "to"; "in"; "output"; "optimize"; "for"; "set"; "maxEvents"; "force"
 ]
 /// List of valid suffixes for score entries
@@ -215,7 +215,7 @@ let meetTeams = pright (pright pcomma (pright(pad (pstr "teams")) pcolon)) (pad 
 let optionalTeams = meetTeams <|> presult []
 
 /// Parses maxEventsPerAthlete
-let maxAthletes = pright (pright pcomma (pright (pad(pstr "maxEventsPerAthlete")) pcolon)) (pad pnumber) |>> int |>> Some
+let maxAthletes = pright (pright pcomma (pright (pad(pstr "maxEntries")) pcolon)) (pad pnumber) |>> int |>> Some
 
 /// Makes it optional to include max athletes
 let optionalMaxAthletes = maxAthletes <|> presult None
