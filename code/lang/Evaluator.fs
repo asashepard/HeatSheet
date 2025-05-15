@@ -68,8 +68,18 @@ let declareAthlete (state: EvalState) (a: AthleteDeclaration) =
 
 /// Creates a roster variable. Does not allow duplicates.
 let declareRoster (state: EvalState) (r: RosterDeclaration) =
-    if Map.containsKey r.Name state.Rosters then failwith $"Error: Roster {r.Name} already defined. Please use a different identifer."
-    else { state with Rosters = state.Rosters.Add(r.Name, Set.ofList r.Athletes) }
+    if Map.containsKey r.Name state.Rosters then
+        failwith $"Error: Roster {r.Name} already defined. Please use a different identifier."
+    else
+        let missing =
+            r.Athletes |> List.filter (fun a -> not (Map.containsKey a state.Athletes))
+        if missing <> [] then
+            let missingStr = String.concat ", " missing
+            failwith $"Error: The following athlete(s) in roster {r.Name} are undefined: {missingStr}"
+
+        else
+            { state with Rosters = state.Rosters.Add(r.Name, Set.ofList r.Athletes) }
+
 
 /// Creates a meet variable
 let declareMeet (state: EvalState)(m: MeetDeclaration) =

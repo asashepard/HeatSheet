@@ -1,1 +1,0 @@
-set optimization type to simulation;

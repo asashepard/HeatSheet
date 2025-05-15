@@ -1,0 +1,5 @@
+Asa and Yanni worked togehter on this lab. 
+Yanni worked on the AST/parsing, basic evaluator functions to manage the state, and the LaTeX outputs. 
+Asa completed the optimization logic, including the algorithm to find the optimal athlete assignments and the simulations.
+
+Both of us received help from ChatGPT on writing functions in F# and debugging.
