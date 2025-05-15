@@ -218,4 +218,8 @@ include Wesleyan in LittleThrees;
 
 output roster Williams to "williams_roster1";
 
+output meet LittleThrees to "little_threes";
+
+force YanniKakouris to 100m;
+
 optimize Williams for LittleThrees;

@@ -421,8 +421,8 @@ let meetDocumentHeader meet =
         |> String.concat ", "
     [
         $"\\section*{{Meet: {meet.Name}}}"
-        $"Events: {eventStringList}\\\\"
-        $"Scoring: {scoringStringList}\\\\"
+        $"\\textbf{{Events}}: {eventStringList}\\\\"
+        $"\\noindent\\textbf{{Scoring}}: {scoringStringList}\\\\"
     ]
 
 /// Builds the event table with potential athletes and their PRs
