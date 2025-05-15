@@ -9,12 +9,19 @@ open Combinator
 // (a) End-to-end test: parse + eval full program
 [<Fact>]
 let ``End-to-end: athlete and optimize`` () =
-    let input = """
-let roster TestRoster;
-"""
+    let input = """let athlete TestAthlete,
+        events: 100m,
+        prs: 100m: 11.01;
+        let roster R;
+        add TestAthlete to R;
+        let meet M,
+        events: 100m,
+        scoring: 1st: 10;
+        optimize R for M;
+        """
     match Parser.parse input with
-    | Some program ->
-        let result = Evaluator.eval program
+    | Some prog ->
+        let result = Evaluator.eval prog
         Assert.Equal(0, result)
     | None ->
         Assert.True(false, "Parse failed")
