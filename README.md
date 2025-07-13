@@ -1,0 +1,1 @@
+[View the full specification (PDF)](docs/specification.pdf)

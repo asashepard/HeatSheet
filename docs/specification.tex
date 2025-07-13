@@ -19,6 +19,8 @@
 \usepackage{enumitem}   
 \usepackage{fancyvrb}
 \usepackage{todonotes}
+\usepackage{listings}
+\usepackage{xcolor}
 
 % This will set LaTeX to look for figures in the same directory as the .tex file
 \graphicspath{.} % The dot means current directory.
@@ -29,7 +31,7 @@
 \rhead{\today}
 \lfoot{CSCI 334: Principles of Programming Languages}
 \cfoot{\thepage}
-\rfoot{Spring 2024}
+\rfoot{Spring 2025}
 
 % Some commands for changing header and footer format
 \renewcommand{\headrulewidth}{0.4pt}
@@ -52,9 +54,9 @@
 
 % Edit below as instructed
 
-\title{SnappyLanguageName Language Specification} % Replace SnappyLanguageName with your project's name
+\title{HeatSheet Language Specification}
 
-\author{Partner One \and Parnter Two} % Replace these with real partner names.
+\author{Yanni Kakouris \and Asa Shepard} % Replace these with real partner names.
 
 \begin{document}
   
@@ -62,27 +64,289 @@
 
 \subsection*{Introduction}
 
-\todo[inline]{Delete this TODO and replace with 2+ paragraphs.}
+Managing a complete roster of track and field athletes is both time-consuming and difficult for coaches. 
+Each athlete has many events they can run, personal records (PRs) in these events, and a few best events for scoring points at meets. For coaches, determining where athletes can perform best can be the difference between winning a meet or not. However, coaches tend to rely on intuition to determine the best event(s) for their athletes, which can be suboptimal in many cases. \\
 
+Our language, HeatSheet, intends to streamline this process for coaches. By managing the roster under the hood, computing the expected points for an athlete in an event, and determining their comparative advantage, HeatSheet will complete all of the hard work for coaches. 
+Given that many coaches aren’t too technical or familiar with programming languages, our language will be designed to be as simple as possible. It won’t require advanced syntax or programming knowledge to understand. 
+Also, it will allow for coaches to overwrite our calculations if they strongly believe that an athlete should compete in a certain event (i.e. based on practice performance or gut feeling). 
+The outputted PDF files will contain all the information a coach needs for a given athlete, roster, or competition, formatted in LaTeX.
 \subsection*{Design Principles}
 
-\todo[inline]{Delete this TODO and replace with 1+ paragraphs.}
+HeatSheet will have a ``coach-first'' design.  The language is built for track and field coaches, not programmers. Syntax and semantics prioritize readability, clarity, and domain familiarity. Whitespace will be entirely ignored in HeatSheet to allow coaches to format their programs as they see fit.
+The language will be declarative, so coaches will be able to describe what they want, not how to do it step by step. HeatSheet will compute mostly under-the-hood, making it easy for coaches to quickly get the information they need. 
+Athletes, rosters, and meets are modeled as composable objects, so users can easily adapt the same logic across different scenarios or competitions. Ultimately, HeatSheet will be simple enough for dual meet planning, but powerful enough to handle championship meets or team selection for nationals if necessary.
 
 \subsection*{Examples}
 
-\todo[inline]{Delete this TODO and replace with 3+ examples and accompanying descriptions.}
+
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  captionpos=b
+}
+
+Example 1:
+\begin{lstlisting}[language=,caption={HeatSheet Language Example 1}]
+let roster Williams;
+
+let athlete: YanniKakouris,
+  events: 100m, 200m, 4x100m,
+  prs:
+    100m: 11.01,
+    200m: 22.42,
+  maxEvents: 1;
+
+add YanniKakouris to Williams;
+output roster Williams;
+\end{lstlisting}
+Example 1 defines a roster \texttt{Williams} and an athlete \texttt{YanniKakouris} with the specified events
+and personal records, as well as an optional tag ``maxEvents''. It then adds \texttt{YanniKakouris} to the \texttt{Wililams} roster.
+Finally, it ouputs the roster to a PDF generated using LaTeX.
+
+Example 2:
+\begin{lstlisting}[language=,caption={HeatSheet Language Example 2}]
+let meet: StateChampionships,
+  events: 100m, 200m, 400m, 4x100m, 4x400m,
+  scoring: 1st: 10, 2nd: 8, 3rd: 6, 4th: 5,
+           5th: 4, 6th: 3, 7th: 2, 8th: 1,
+  maxEntries: 4;
+
+optimize Williams for StateChampionships;        
+\end{lstlisting}
+Example 2 defines a meet titled \texttt{StateChampionships} with the specified events, scoring system, and max events per athlete.
+It then optimizes the entire \texttt{Williams} roster, placing each athlete into the best possible event to maximize score for \texttt{StateChampionships}. This optimize command 
+will generate a LaTeX file and PDF showing where to place each athlete. \\
+
+Example 3: 
+\begin{lstlisting}[language=,caption={HeatSheet Language Example 3}]
+let athlete: AsaShepard,
+  events: 400m, 800m, 4x400m,
+  prs:
+    400m: 48.68,
+    800m: 1:55.04;
+add AsaShepard to Williams;
+
+let athlete: AmherstMammoth,
+  events: 400m, 800m,
+  prs:
+    400m: 49.00,
+    800m: 1:56.00;
+add AmherstMammoth to Amherst;
+
+add Amherst to StateChampionships;
+
+optimize Williams for StateChampionships;
+
+remove AsaShepard from Williams;
+remove YanniKakouris from Williams;
+\end{lstlisting}
+Example 3 defines another athlete, labeled \texttt{AsaShepard}. It then defines an athlete \texttt{AmherstMammoth} and places
+that athlete on the \texttt{Amherst} roster. It then includes them as a competitor at \texttt{StateChampionships}. Finally, it removes 
+\texttt{AsaShepard} and \texttt{YanniKakouris} from the \texttt{Williams} roster. To run any of these examples: 1. Make sure the example
+is in a file with the extension \texttt{.hs} (e.g., \texttt{example.hs}). 2. Run the command \texttt{dotnet run example.hs} in the terminal.
+This will generate a PDF file in the same directory as the example file. The PDF will be named \texttt{example.pdf}.
 
 \subsection*{Language Concepts}
 
-\todo[inline]{Delete this TODO and replace with 1+ paragraphs.}
+HeatSheet is built on a set of domain-specific objects, all composed from a small number of primitive types. These primitives include strings, integers and floats, booleans, and lists. 
+These primitives form the foundation for the language’s structured objects. The first is an athlete, a user-defined object that combines identifiers, eligible events, personal records, and other optional data.
+A meet is a composite structure that bundles events together with a scoring system and global constraints. Coaches must understand what makes up each of these objects, which they already know from their experience coaching.
+
+Coaches can impose constraints to model the realities of competition, such as limiting an athlete to four events, even if it may not be theoretically optimal. These goals shape how the system evaluates possible lineups.
 
 \subsection*{Formal Syntax}
 
-\todo[inline]{Delete this TODO and replace with BNF.}
+HeatSheet reads like a set of natural-language commands. A file is just a list of statements, one per line. It is enough for a coach to read, edit, and rerun without too much formal punctuation or brackets. Semicolons mark the end of a statement, allowing for all whitespace to be ignored.
+
+\begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
+  <program>             ::= <statement> ;+
+
+  <statement>           ::= <roster-declaration>
+                          | <athlete-declaration>
+                          | <athlete-update>
+                          | <set-pr>
+                          | <meet-declaration>
+                          | <meet-add>
+                          | <meet-remove>
+                          | <roster-add>
+                          | <roster-removal>
+                          | <output>
+                          | <optimize>
+                          | <duplicate>
+                          | <set-optimize-type>
+                          | <force-athlete>
+                          | <free-athlete>
+  
+  <roster-declaration>  ::= let roster <identifier>
+                          | let roster <identifier>,
+                            athletes: <athlete-list>
+  
+  <athlete-declaration> ::= let athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>
+                          | let athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>,
+                            maxevents: <int>
+  
+  <athlete-update>      ::= update athlete <identifier>,
+                            events: <event-list>
+                          | update athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>
+                          | update athlete <identifier>,
+                            events: <event-list>,
+                            prs: <pr-list>,
+                            maxevents: <int>
+  
+  <set-pr>              ::= set <athlete> to <time> in <event>
+  
+  <meet-declaration>    ::= let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>
+                          | let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>,
+                            teams: <roster-list>
+                          | let meet <identifier>,
+                            events: <event-list>,
+                            scoring: <scoring-list>,
+                            teams: <roster-list>,
+                            maxEntries: <int>
+  
+  <meet-add>            ::= include <roster> in <meet>
+  
+  <meet-remove>         ::= exclude <roster> from <meet>
+  
+  <roster-add>          ::= add <athlete> to <roster>
+  
+  <roster-removal>      ::= remove <athlete> from <roster>
+  
+  <output>              ::= output <roster>
+                          | output <meet>
+                          | output <roster> to <path>
+                          | output <meet> to <path>
+  
+  <optimize>            ::= optimize <roster> for <meet>
+  
+  <duplicate>           ::= duplicate <athlete> to <identifier>
+                          | duplicate <roster> to <identifier>
+                          | duplicate <meet> to <identifier>
+
+  <set-optimize-type>   ::= set optimization type as <optimization-type>
+
+  <force-athlete>       ::= force <athlete> to <event>
+
+  <free-athlete>        ::= free <athlete> from <event>
+  
+  <athlete-list>        ::= <athlete> , <athlete>*
+  <roster-list>         ::= <roster> , <roster>*
+  <event-list>          ::= <event> , <event>*
+  <pr-list>             ::= <pr> , <pr>*
+  <scoring-list>        ::= <score-entry> , <score-entry>*
+  
+  <pr>                  ::= <event> : <time>
+  <score-entry>         ::= <place> : <int>
+  <place>               ::= <int> <suffix>
+  <time>                ::= <float>
+                          | <int> : <float>
+                          | <int> : <int> : <float>
+  
+  <path>                ::= (<letter> | <digit> | "." | "/" | "_" | "-")+
+
+  <event>               ::= <identifier>
+  <athlete>             ::= <identifier>
+  <roster>              ::= <identifier>
+  <meet>                ::= <identifier>
+
+  <optimization-type>   ::= basic | simulation
+
+  <identifier>          ::= (<letter> | <digit>)*
+  <float>               ::= <int> . <int>
+  <int>                 ::= <digit>+
+  <digit>               ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+  <letter>              ::= a-z | A-Z
+  <suffix>              ::= st | nd | rd | th
+    
+\end{lstlisting}
 
 \subsection*{Semantics}
 
-\todo[inline]{Delete this TODO and replace with as much text as is needed.}
+Primitive values include strings for names, integers, floats, time literals (stored internally as seconds with millisecond precision), booleans, and ordered lists.  
+These values combine to form the four key objects: an \emph{Athlete} (a name, eligible events, and a map from event to personal record), a \emph{Roster} (a named collection of athletes), a \emph{Meet} (its events, scoring table, and global constraints such as the maximum events per athlete), and an \emph{Optimization}.  
+All objects are immutable once declared. Only the references inside rosters and meets change when coaches add or remove athletes. \\
+
+Evaluation proceeds top-to-bottom.  
+The interpreter builds an in-memory catalogue as it reads.  
+Each \lstinline|add|, \lstinline|remove|, or \lstinline|force| mutates that catalogue in place.  
+When it encounters \lstinline|optimize Roster for Meet|, HeatSheet computes expected points from personal records, searches the legal assignment space while respecting every explicit \lstinline|force|, and selects the best lineup.  
+Results are written to a PDF using LaTeX, with the path echoed to the console; there are no other side-effects.  
+An unknown identifier aborts execution with a clear error message, whereas non-fatal issues only generate warnings.
+
+\subsection*{Semantics Table}
+
+\begin{tabular}{|p{4.2cm}|p{4.2cm}|p{7.0cm}|}
+  \hline
+  \textbf{Syntax} & \textbf{Abstract Syntax} & \textbf{Meaning} \\
+  \hline
+  \texttt{let athlete: \textit{i}, events: \textit{e1}, \textit{e2}, prs: \textit{p1}, \textit{p2}} & \texttt{Athlete of AthleteDeclaration} & Declares a new athlete \textit{i} with a list of eligible events and personal records. Optionally includes a max events cap. \\
+  \hline
+  \texttt{update athlete: \textit{i}, events: \textit{e1}, prs: \textit{p1}} & \texttt{AthleteUpdate of AthleteUpdate} & Updates athlete \textit{i}'s events, PRs, and optionally max events. Errors if \textit{i} is undeclared. \\
+  \hline
+  \texttt{set \textit{i} to \textit{t} in \textit{e}} & \texttt{PRChange of SetPR} & Sets or updates the personal record for athlete \textit{i} in event \textit{e} to time \textit{t}. \\
+  \hline
+  \texttt{let roster \textit{r}} & \texttt{Roster of RosterDeclaration} & Declares a new team roster named \textit{r}. It starts empty unless athletes are listed. \\
+  \hline
+  \texttt{add \textit{a} to \textit{r}} & \texttt{RosterAdd of RosterAdd} & Adds athlete \textit{a} to roster \textit{r}. Both must be previously declared. \\
+  \hline
+  \texttt{remove \textit{a} from \textit{r}} & \texttt{RosterRemoval of RosterRemoval} & Removes athlete \textit{a} from roster \textit{r}. Safe to call even if not present. \\
+  \hline
+  \texttt{let meet: \textit{m}, events: \textit{e1}, scoring: \textit{s}} & \texttt{Meet of MeetDeclaration} & Declares meet \textit{m} with events and scoring rules. May also include teams and max entries. \\
+  \hline
+  \texttt{optimize \textit{r} for \textit{m}} & \texttt{Optimize of Optimize} & Optimizes athlete assignments from roster \textit{r} to maximize score in meet \textit{m}. \\
+  \hline
+  \texttt{force \textit{a} to \textit{e}} & \texttt{ForceAthleteToEvent of ForceAthlete} & Forces athlete \textit{a} to compete in event \textit{e}, overriding optimization. \\
+  \hline
+  \texttt{free \textit{a} from \textit{e}} & \texttt{FreeAthleteFromEvent of FreeAthlete} & Unforces athlete \textit{a} from event \textit{e}, restoring default assignment logic. \\
+  \hline
+  \texttt{output \textit{r}} & \texttt{RosterShow of RosterToShow} & Generates LaTeX and PDF output for roster \textit{r}. Optionally accepts a file path. \\
+  \hline
+  \texttt{output \textit{m}} & \texttt{MeetShow of MeetToShow} & Generates LaTeX and PDF output for meet \textit{m}, showing all teams and entries. \\
+  \hline
+  \texttt{<i>} & \texttt{Identifier} & A name used for athletes, rosters, events, or meets. Internally represented as a string. \\
+\hline
+\texttt{<t>} & \texttt{Time} & A race time. Can be a float (e.g., \texttt{11.01}), a minute:second pair (e.g., \texttt{1:55.04}), or hour:minute:second. Normalized to seconds. \\
+\hline
+\texttt{<n>} & \texttt{int} & A non-negative integer used for max events, entry caps, placements, etc. \\
+\hline
+\texttt{<b>} & \texttt{bool} & A boolean flag (e.g., internal or future constraint handling). \\
+\hline
+\texttt{<list>} & \texttt{List of primitives} & A comma-separated list of identifiers, events, scores, or times. \\
+\hline
+
+  \end{tabular}
+  
+  
+
+
+\subsection*{Remaining Work}
+
+To make it easier for coaches, our language would benefit from a GUI, similar to R-Studio or STATA, that allows coaches to see the current environment they created.
+It would also be helpful to save athletes and rosters in a custom file so that coaches can save/load certain rosters. Implementing these two features was not feasible
+given the time constraint for this project, as well as being limited to F\#. \\
+Another improvement would be to implement a connection to a track database, like TFRRS or Athletic.net, that would allow coaches to quickly gather all information on their athletes
+without having to input their informatin manually. Since there is no complete database with a public API, this task is difficult and would require scraping their websites. \\
+Lastly, it is likely that some coaches would like more control over the optimization. It is difficult to know exactly what these features may be, but feedback from real coaches
+would help us determine helpful features to add.
+
 
 % DO NOT DELETE ANYTHING BELOW THIS LINE
 \end{document}
